@@ -5,10 +5,11 @@ optfor90= -O2  $(opt)
 #optfor90= -g  -traceback $(opt)
 optfor90t= -O2   $(opt)
 
-AlphaBayes: Global.o ReadParam.o ReadData.o  \
-	$(comp) $(optfor90) Global.o ReadParam.o ReadData.o  \
-	  -o AlphaBayes \
-	mv a.out weibull.exe
+AlphaBayes: Global.o ReadParam.o ReadData.o InitiateSeed.o PearsnR4.o \
+	  RidgeRegression.o gasdev.o momentR4.o ran1.o random_order.o  \
+	$(comp) $(optfor90) Global.o ReadParam.o ReadData.o InitiateSeed.o PearsnR4.o \
+	  RidgeRegression.o gasdev.o momentR4.o ran1.o random_order.o  \
+	  -o AlphaBayes
 
 Global.o: Global.f90
 	$(comp) -c $(optfor90) -o Global.o Global.f90
