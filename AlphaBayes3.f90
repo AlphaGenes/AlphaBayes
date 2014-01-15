@@ -14,22 +14,6 @@ character(len=1000) :: GenoTrFile,GenoTeFile,PhenoTrFile,TbvFile,FileFixedSnp
 
 end module Global
 
-!##################################################################################################################################
-
-program AlphaBayes
-use Global
-implicit none
-
-
-call InitiateSeed
-call ReadParam
-call ReadData
-call RidgeRegression
-
-end program AlphaBayes
-
-!##################################################################################################################################
-
 subroutine ReadParam
 use Global
 implicit none
