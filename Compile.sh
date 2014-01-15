@@ -10,5 +10,4 @@ ifort ran1.f90 -c -O3 -i-static -O3 -m64
 ifort random_order.f90 -c -O3 -i-static -O3 -m64
 ifort AlphaBayes.f90 -c -O3 -i-static -O3 -m64
 
-
-ifort *.o -mkl -o AlphaBayes3
+ifort *.o -mkl -o AlphaBayes
