@@ -6,7 +6,7 @@ implicit none
 
 integer :: i,j
 character(len=100) :: dumC
-real (4) :: ave,adev,sdev,var,skew,curt
+real (4) :: ave,adev,sdev,var,skew,curt,af,sum2pq
 
 open (unit=101,file=trim(GenoTrFile),status="old")
 open (unit=102,file=trim(PhenoTrFile),status="old")
@@ -48,11 +48,16 @@ do i=1,nAnisTe
 	read (104,*) dumC,Tbv(i,1)
 enddo	
 
+sum2pq=0.0
 do j=1,nSnp
 	call momentR4(GenosTr(:,j),nAnisTr,ave,adev,sdev,var,skew,curt)
-	GenosTr(:,j)=(GenosTr(:,j)-ave)/sdev
-	GenosTe(:,j)=(GenosTe(:,j)-ave)/sdev
+	af=ave/2.0
+	sum2pq=sum2pq+2.0*(1.0-af)*af
+	GenosTr(:,j)=(GenosTr(:,j)-ave)
+	GenosTe(:,j)=(GenosTe(:,j)-ave)
 enddo
+GenosTr(:,:)=GenosTr(:,:)/sqrt(sum2pq)
+GenosTe(:,:)=GenosTe(:,:)/sqrt(sum2pq)
 
 end subroutine ReadData
 
