@@ -1,0 +1,16 @@
+GenotypeTraining	,GarrickFernandoWagAlphaBayesGenosTrain.txt
+GenotypeTesting		,GarrickFernandoWagTestingGenos.txt
+PhenotypeTraining	,GarrickFernandoWagPhen.txt
+TbvTesting			,GarrickFernandoWagTBV.txt
+FixedSnpFile		,FixedSnp.txt
+nSnp				,1000
+nAnisTr				,100
+nAnisTe				,100
+nRound				,100000
+nBurn				,0
+VareA				,0.5
+VarE				,0.5
+NumberOfProcessors	,3
+
+
+
