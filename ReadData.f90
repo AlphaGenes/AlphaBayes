@@ -6,7 +6,7 @@ implicit none
 
 integer :: i,j
 character(len=100) :: dumC
-real (4) :: ave,adev,sdev,var,skew,curt,af,sum2pq
+real (4) :: ave,adev,sdev,var,skew,curt,TmpAlleleFreq,sum2pq
 
 open (unit=101,file=trim(GenoTrFile),status="old")
 open (unit=102,file=trim(PhenoTrFile),status="old")
@@ -51,8 +51,8 @@ enddo
 sum2pq=0.0
 do j=1,nSnp
 	call momentR4(GenosTr(:,j),nAnisTr,ave,adev,sdev,var,skew,curt)
-	af=ave/2.0
-	sum2pq=sum2pq+2.0*(1.0-af)*af
+	TmpAlleleFreq=ave/2.d0
+	sum2pq=sum2pq+2.d0*(1.d0-TmpAlleleFreq)*TmpAlleleFreq
 	GenosTr(:,j)=(GenosTr(:,j)-ave)
 	GenosTe(:,j)=(GenosTe(:,j)-ave)
 enddo
