@@ -1,18 +1,18 @@
 comp=ifort
-opt=  -zero -nowarn
-#opt=  -lpthread -nbs -zero -nowarn
-optfor90= -mkl -i-static -O3 -m64 $(opt)
+opt= -zero -nowarn
+#opt= -lpthread -nbs -zero -nowarn
+optfor90= -mkl -O3 $(opt)
 #optfor90= -g -traceback $(opt)
-optfor90t= -O2 $(opt)
+uname := ${shell uname}
+ifneq ($(uname), Linux)
+  optfor90 := $(optfor90) -i-static
+endif
 
-AlphaBayes: AlphaBayes.o Global.o ReadParam.o ReadData.o InitiateSeed.o PearsnR4.o \
-	  RidgeRegression.o gasdev.o momentR4.o ran1.o random_order.o 
-	$(comp) $(optfor90) AlphaBayes.o Global.o ReadParam.o ReadData.o InitiateSeed.o PearsnR4.o \
+AlphaBayes: AlphaBayes.f90 Global.o ReadParam.o ReadData.o InitiateSeed.o PearsnR4.o \
+	RidgeRegression.o gasdev.o momentR4.o ran1.o random_order.o
+	$(comp) $(optfor90) AlphaBayes.f90 Global.o ReadParam.o ReadData.o InitiateSeed.o PearsnR4.o \
 	  RidgeRegression.o gasdev.o momentR4.o ran1.o random_order.o  \
 	  -o AlphaBayes
-
-AlphaBayes.o: AlphaBayes.f90
-	$(comp) -c $(optfor90) -o AlphaBayes.o AlphaBayes.f90
 
 Global.o: Global.f90
 	$(comp) -c $(optfor90) -o Global.o Global.f90
