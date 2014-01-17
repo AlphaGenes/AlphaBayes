@@ -35,8 +35,8 @@ adev=adev/n
 var=(var-ep**2/n)/(n-1)
 sdev=SQRT(var)
 IF(var.ne.0)then
-        skew=skew/((n-1)*sdev**3)
-        curt=curt/((n-1)*var**2)-3
+        skew=skew/(n*sdev**3)
+        curt=curt/(n*var**2)-3
 ELSE
         !PRINT*, 'no skew or kurtosis when zero variance in moment'
         !PAUSE 'no skew or kurtosis when zero variance in moment'
