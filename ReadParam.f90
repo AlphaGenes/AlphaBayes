@@ -39,7 +39,7 @@ read (100,*) dumC,VarA
 read (100,*) dumC,VarE
 read (100,*) dumC,nProcessors
 read (100,*) dumC,ScalingOpt
-read (100,*) dumC,MissingCode
+read (100,*) dumC,MissingGenoCode
 
 call OMP_SET_NUM_THREADS(nProcessors)
 
