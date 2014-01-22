@@ -4,7 +4,8 @@ subroutine RidgeRegression
 use Global
 implicit none
 
-real(4) :: sdot,eps,InvLhs,Rhs,Lhs,SolOld,myone,myzero, TmpVal,Correlation
+real(4) :: sdot,eps,InvLhs,Rhs,Lhs,SolOld,myone,myzero,TmpVal
+real(4) :: Correlation,InterceptTbvEbv,SlopeTbvEbv,InterceptEbvTbv,SlopeEbvTbv
 integer :: i,h,j,snpid,RandomOrdering(nSnp),One
 
 allocate(XpX(nSnp,1))
@@ -57,10 +58,10 @@ do h=1,nRound
 		E(:,1)=Phen(:,1)-Xg(:,1)-Mu
 	endif
 
-	if (Eps.lt. 1e-10) then
+	if (Eps.lt.1e-16) then
 		ConvergedRounds=h
 		exit
-	endif	
+	endif
 
 enddo
 
@@ -92,10 +93,10 @@ do i=1,nAnisTe
 enddo
 close(1001)
 
-call PearsnR4 (Tbv(:,1),Ebv(:,1),nAnisTe,Correlation)
-print*, Correlation
-open (unit=1001,file="TbvEbvCorrelation.txt",status="unknown")
-  write(1001,*) Correlation 
+call PearsnR4 (Tbv(:,1),Ebv(:,1),nAnisTe,Correlation,InterceptTbvEbv,SlopeTbvEbv,InterceptEbvTbv,SlopeEbvTbv)
+print*, Correlation,InterceptTbvEbv,SlopeTbvEbv,InterceptEbvTbv,SlopeEbvTbv
+open (unit=1001,file="TbvEbvCorrelationSlope.txt",status="unknown")
+  write(1001,*) Correlation,SlopeTbvEbv,SlopeEbvTbv
 close(1001)
 
 end subroutine RidgeRegression
