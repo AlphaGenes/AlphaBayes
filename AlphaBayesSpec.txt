@@ -11,6 +11,8 @@ nBurn				,0
 VareA				,0.5
 VarE				,0.5
 NumberOfProcessors	,3
+ScalingOption,  2
+MissingGenoCode, 9
 
 
 

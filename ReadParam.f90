@@ -34,10 +34,12 @@ endif
 read (100,*) dumC,nAnisTr
 read (100,*) dumC,nAnisTe
 read (100,*) dumC,nRound
-read (100,*) dumC,nBurn	
+read (100,*) dumC,nBurn
 read (100,*) dumC,VarA
-read (100,*) dumC,VarE		
+read (100,*) dumC,VarE
 read (100,*) dumC,nProcessors
+read (100,*) dumC,ScalingOpt
+read (100,*) dumC,MissingCode
 
 call OMP_SET_NUM_THREADS(nProcessors)
 
