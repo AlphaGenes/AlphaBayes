@@ -58,14 +58,12 @@ do h=1,nRound
 		E(:,1)=Phen(:,1)-Xg(:,1)-Mu
 	endif
 
-	if (Eps.lt.1e-16) then
-		ConvergedRounds=h
+	if (eps.lt.1e-8) then
 		exit
 	endif
-
 enddo
 
-print *, "Converged in ", ConvergedRounds," rounds"
+print *, "Stopped after ", h," rounds out of ", nRound
 
 !Output section
 open (unit=1002,file="SnpSolutions.txt",status="unknown")
@@ -81,7 +79,6 @@ do i=1,nSnpExternal
 	endif
 	write (1002,*) i,SnpOut(i)
 enddo	
-
 
 close(1002)
 
