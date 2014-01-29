@@ -5,7 +5,7 @@ use Global
 implicit none
 
 real(4) :: sdot,eps,InvLhs,Rhs,Lhs,SolOld,myone,myzero,TmpVal
-real(4) :: Correlation,InterceptTbvEbv,SlopeTbvEbv,InterceptEbvTbv,SlopeEbvTbv
+real(4) :: Correlation
 integer :: i,h,j,snpid,RandomOrdering(nSnp),One
 
 allocate(XpX(nSnp,1))
@@ -93,10 +93,10 @@ do i=1,nAnisTe
 enddo
 close(1001)
 
-call PearsnR4 (Tbv(:,1),Ebv(:,1),nAnisTe,Correlation,InterceptTbvEbv,SlopeTbvEbv,InterceptEbvTbv,SlopeEbvTbv)
-print*, Correlation,InterceptTbvEbv,SlopeTbvEbv,InterceptEbvTbv,SlopeEbvTbv
-open (unit=1001,file="TbvEbvCorrelationSlope.txt",status="unknown")
-  write(1001,*) Correlation,SlopeTbvEbv,SlopeEbvTbv
+call PearsnR4 (Tbv(:,1),Ebv(:,1),nAnisTe,Correlation)
+print*, Correlation
+open (unit=1001,file="TbvEbvCorrelation.txt",status="unknown")
+  write(1001,*) Correlation
 close(1001)
 
 end subroutine RidgeRegression
