@@ -20,13 +20,13 @@ One=1
 do j=1,nSnp
 	XpX(j,1)=sdot(nAnisTr, GenosTr(:,j), 1, GenosTr(:,j), 1) + 0.000000000000001
 	Lambda(j)=VarE/(VarA/nSnp)
-enddo  
+enddo
 
 Mu=0.00
 E(:,1)=Phen(:,1)-Mu !GG
 
 do h=1,nRound
-	eps=0.0	
+	eps=0.0
 
 	!Intercept
 	E(:,1)=E(:,1)+Mu
@@ -40,7 +40,7 @@ do h=1,nRound
 	do j=1,nSnp
 		snpid=RandomOrdering(j)
 
-		E(:,1)=E(:,1)+(GenosTr(:,snpid)*G(snpid,1)) 
+		E(:,1)=E(:,1)+(GenosTr(:,snpid)*G(snpid,1))
 
 		Lhs=XpX(snpid,1)+Lambda(snpid)
 		Rhs=sdot(nAnisTr, GenosTr(:,snpid), 1, E(:,1), 1)
@@ -49,7 +49,7 @@ do h=1,nRound
 		G(snpid,1)=Rhs/Lhs
 
 		E(:,1)=E(:,1)-(GenosTr(:,snpid)*G(snpid,1))
-		Eps=Eps+(G(snpid,1)-SolOld)**2			
+		Eps=Eps+(G(snpid,1)-SolOld)**2
 
 	enddo
 
@@ -64,7 +64,7 @@ do h=1,nRound
 enddo
 
 ! Rescale back to phenotype scale
-G(:)=G(:)*sqrt(VarY)
+G(:,1)=G(:,1)*sqrt(VarY)
 
 print *, "Stopped after ", h," rounds out of ", nRound
 
@@ -81,7 +81,7 @@ do i=1,nSnpExternal
 		SnpOut(i)=G(j,1)
 	endif
 	write (1002,*) i,SnpOut(i)
-enddo	
+enddo
 
 close(1002)
 
