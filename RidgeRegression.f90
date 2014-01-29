@@ -63,6 +63,9 @@ do h=1,nRound
 	endif
 enddo
 
+! Rescale back to phenotype scale
+G(:)=G(:)*sqrt(VarY)
+
 print *, "Stopped after ", h," rounds out of ", nRound
 
 !Output section
@@ -75,7 +78,7 @@ j=0
 do i=1,nSnpExternal
 	if (FixedSnp(i)==1) then
 		j=j+1
-		SnpOut(i)=G(j,1) 
+		SnpOut(i)=G(j,1)
 	endif
 	write (1002,*) i,SnpOut(i)
 enddo	

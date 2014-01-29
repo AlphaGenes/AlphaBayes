@@ -6,7 +6,7 @@ implicit none
 
 integer :: i,j
 character(len=100) :: dumC
-real (4) :: ave,adev,sdev,var,skew,curt
+real(4) :: ave,adev,sdev,var,skew,curt
 real(4) :: TmpAlleleFreq,TmpExpVarX,SumExpVarX,TmpObsVarX,SumObsVarX
 
 open (unit=101,file=trim(GenoTrFile),status="old")
@@ -42,6 +42,7 @@ enddo
 call momentR4(Phen(:,1),nAnisTr,ave,adev,sdev,var,skew,curt)
 
 Phen(:,1)=(Phen(:,1)-ave)/sdev
+VarY=var
 
 do i=1,nAnisTe
 	read (103,*) dumC,SnpTmp(:)
