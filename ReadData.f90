@@ -6,7 +6,8 @@ implicit none
 
 integer :: i,j
 character(len=100) :: dumC
-real (4) :: ave,adev,sdev,var,skew,curt,TmpAlleleFreq,Tmp2pq,sum2pq
+real (4) :: ave,adev,sdev,var,skew,curt
+real(4) :: TmpAlleleFreq,TmpExpVarX,SumExpVarX,TmpObsVarX,SumObsVarX
 
 open (unit=101,file=trim(GenoTrFile),status="old")
 open (unit=102,file=trim(PhenoTrFile),status="old")
@@ -48,23 +49,42 @@ do i=1,nAnisTe
 	read (104,*) dumC,Tbv(i,1)
 enddo
 
-sum2pq=0.0
+SumExpVarX=0.0
+SumObsVarX=0.0
 do j=1,nSnp
 	call momentR4(GenosTr(:,j),nAnisTr,ave,adev,sdev,var,skew,curt)
-	TmpAlleleFreq=ave/2.d0
-	Tmp2pq=2.d0*(1.d0-TmpAlleleFreq)*TmpAlleleFreq+0.00001
-	sum2pq=sum2pq+Tmp2pq
-	if(ScalingOpt==1) then
-	  ! Scaling markers by marker specific genotypic variance
-		Tmp2pq=sqrt(Tmp2pq)
-	  GenosTr(:,j)=(GenosTr(:,j)-ave)/Tmp2pq
-	  GenosTe(:,j)=(GenosTe(:,j)-ave)/Tmp2pq
+	TmpAlleleFreq=ave/2
+	TmpExpVarX=2.0*(1.0-TmpAlleleFreq)*TmpAlleleFreq+0.00001
+	SumExpVarX=SumExpVarX+TmpExpVarX
+  TmpObsVarX=var+0.00001
+  SumObsVarX=SumObsVarX+TmpObsVarX
+  ! Center
+	GenosTr(:,j)=GenosTr(:,j)-ave
+	GenosTe(:,j)=GenosTe(:,j)-ave
+	if(ScalingOpt==2) then
+	  ! Scale by marker specific variance - expected
+	  TmpExpVarX=sqrt(TmpExpVarX)
+	  GenosTr(:,j)=GenosTr(:,j)/TmpExpVarX
+	  GenosTe(:,j)=GenosTe(:,j)/TmpExpVarX
+	endif
+	if(ScalingOpt==3) then
+	  ! Scale by marker specific variance - observed
+	  TmpObsVarX=sqrt(TmpObsVarX)
+	  GenosTr(:,j)=GenosTr(:,j)/TmpObsVarX
+	  GenosTe(:,j)=GenosTe(:,j)/TmpObsVarX
 	endif
 enddo
-if(ScalingOpt==2) then
-  ! Scaling markers by global genotypic variance
-  GenosTr(:,:)=GenosTr(:,:)/sqrt(sum2pq/nSnp)
-  GenosTe(:,:)=GenosTe(:,:)/sqrt(sum2pq/nSnp)
+if(ScalingOpt==4) then
+  ! Scale by average marker variance - expected
+  TmpExpVarX=sqrt(SumExpVarX/nSnp)
+  GenosTr(:,:)=GenosTr(:,:)/TmpExpVarX
+  GenosTe(:,:)=GenosTe(:,:)/TmpExpVarX
+endif
+if(ScalingOpt==5) then
+  ! Scale by average marker variance - observed
+  TmpObsVarX=sqrt(SumObsVarX/nSnp)
+  GenosTr(:,:)=GenosTr(:,:)/TmpObsVarX
+  GenosTe(:,:)=GenosTe(:,:)/TmpObsVarX
 endif
 
 end subroutine ReadData
