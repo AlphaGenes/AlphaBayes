@@ -84,6 +84,7 @@ do i=1,nSnpExternal
 enddo
 
 close(1002)
+flush(1002)
 
 open (unit=1001,file="TbvEbv.txt",status="unknown")
 
@@ -97,8 +98,10 @@ call PearsnR4 (Tbv(:,1),Ebv(:,1),nAnisTe,Correlation)
 print*, Correlation
 open (unit=1001,file="TbvEbvCorrelation.txt",status="unknown")
   write(1001,*) Correlation
+flush(1002)
 close(1001)
 
+!call system("sleep 10")
 end subroutine RidgeRegression
 
 !###########################################################################################################################################################
