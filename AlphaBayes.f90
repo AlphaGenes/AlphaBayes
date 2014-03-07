@@ -8,7 +8,9 @@ implicit none
 call InitiateSeed
 call ReadParam
 call ReadData
-call RidgeRegression
+if (trim(MarkerSolver)=="Ridge") call RidgeRegression
+if (trim(MarkerSolver)=="BayesA") call BayesA
+call MarkerEffectPostProcessing
 
 end program AlphaBayes
 

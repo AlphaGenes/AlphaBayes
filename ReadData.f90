@@ -23,6 +23,7 @@ allocate(E(nAnisTr,1))
 allocate(G(nSnp,1))
 allocate(Tbv(nAnisTe,1))
 allocate(Ebv(nAnisTe,1))
+allocate(AlleleFreq(nSnp))
 
 allocate(SnpPosition(nSnp))
 j=0
@@ -52,41 +53,51 @@ enddo
 
 SumExpVarX=0.0
 SumObsVarX=0.0
+Sum2pq=0.0
 do j=1,nSnp
 	call momentR4(GenosTr(:,j),nAnisTr,ave,adev,sdev,var,skew,curt)
 	TmpAlleleFreq=ave/2
+	AlleleFreq(j)=TmpAlleleFreq
+	write (105,*) j,AlleleFreq(j)
 	TmpExpVarX=2.0*(1.0-TmpAlleleFreq)*TmpAlleleFreq+0.00001
+	Sum2pq=Sum2pq+TmpExpVarX
 	SumExpVarX=SumExpVarX+TmpExpVarX
-  TmpObsVarX=var+0.00001
-  SumObsVarX=SumObsVarX+TmpObsVarX
-  ! Center
+  	TmpObsVarX=var+0.00001
+  	SumObsVarX=SumObsVarX+TmpObsVarX
+  	! Center
 	GenosTr(:,j)=GenosTr(:,j)-ave
 	GenosTe(:,j)=GenosTe(:,j)-ave
 	if(ScalingOpt==2) then
-	  ! Scale by marker specific variance - expected
-	  TmpExpVarX=sqrt(TmpExpVarX)
-	  GenosTr(:,j)=GenosTr(:,j)/TmpExpVarX
-	  GenosTe(:,j)=GenosTe(:,j)/TmpExpVarX
+	  	! Scale by marker specific variance - expected
+	  	TmpExpVarX=sqrt(TmpExpVarX)
+	  	GenosTr(:,j)=GenosTr(:,j)/TmpExpVarX
+	  	GenosTe(:,j)=GenosTe(:,j)/TmpExpVarX
 	endif
 	if(ScalingOpt==3) then
-	  ! Scale by marker specific variance - observed
-	  TmpObsVarX=sqrt(TmpObsVarX)
-	  GenosTr(:,j)=GenosTr(:,j)/TmpObsVarX
-	  GenosTe(:,j)=GenosTe(:,j)/TmpObsVarX
+		! Scale by marker specific variance - observed
+	  	TmpObsVarX=sqrt(TmpObsVarX)
+	  	GenosTr(:,j)=GenosTr(:,j)/TmpObsVarX
+	  	GenosTe(:,j)=GenosTe(:,j)/TmpObsVarX
 	endif
 enddo
 if(ScalingOpt==4) then
-  ! Scale by average marker variance - expected
-  TmpExpVarX=sqrt(SumExpVarX/nSnp)
-  GenosTr(:,:)=GenosTr(:,:)/TmpExpVarX
-  GenosTe(:,:)=GenosTe(:,:)/TmpExpVarX
+  	! Scale by average marker variance - expected
+  	TmpExpVarX=sqrt(SumExpVarX/nSnp)
+  	GenosTr(:,:)=GenosTr(:,:)/TmpExpVarX
+  	GenosTe(:,:)=GenosTe(:,:)/TmpExpVarX
 endif
 if(ScalingOpt==5) then
-  ! Scale by average marker variance - observed
-  TmpObsVarX=sqrt(SumObsVarX/nSnp)
-  GenosTr(:,:)=GenosTr(:,:)/TmpObsVarX
-  GenosTe(:,:)=GenosTe(:,:)/TmpObsVarX
+  	! Scale by average marker variance - observed
+  	TmpObsVarX=sqrt(SumObsVarX/nSnp)
+  	GenosTr(:,:)=GenosTr(:,:)/TmpObsVarX
+  	GenosTe(:,:)=GenosTe(:,:)/TmpObsVarX
 endif
+
+close (101)
+close (102)
+close (103)
+close (104)
+close (105)
 
 end subroutine ReadData
 

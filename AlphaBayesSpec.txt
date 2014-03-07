@@ -6,13 +6,14 @@ FixedSnpFile		,FixedSnp.txt
 nSnp				,1000
 nAnisTr				,100
 nAnisTe				,100
-nRound				,100000
-nBurn				,0
+nRound				,1000
+nBurn				,100
 VareA				,0.5
 VarE				,0.5
 NumberOfProcessors	,3
-ScalingOption,  2
-MissingGenoCode, 9
+ScalingOption		,2
+MissingGenoCode		,9
+MarkerSolver		,Ridge
 
 
 

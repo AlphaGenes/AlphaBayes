@@ -9,9 +9,9 @@ ifneq ($(uname), Linux)
 endif
 
 AlphaBayes: AlphaBayes.f90 Global.o ReadParam.o ReadData.o InitiateSeed.o PearsnR4.o \
-	RidgeRegression.o gasdev.o momentR4.o ran1.o random_order.o
+	RidgeRegression.o BayesA.o MarkerEffectPostProcessing.o gasdev.o random_gamma.o momentR4.o ran1.o random_order.o
 	$(comp) $(optfor90) AlphaBayes.f90 Global.o ReadParam.o ReadData.o InitiateSeed.o PearsnR4.o \
-	  RidgeRegression.o gasdev.o momentR4.o ran1.o random_order.o  \
+	RidgeRegression.o BayesA.o MarkerEffectPostProcessing.o gasdev.o random_gamma.o momentR4.o ran1.o random_order.o \
 	  -o AlphaBayes
 
 Global.o: Global.f90
@@ -32,8 +32,17 @@ PearsnR4.o: PearsnR4.f90
 RidgeRegression.o: RidgeRegression.f90
 	$(comp) -c $(optfor90) -o RidgeRegression.o RidgeRegression.f90
 
+BayesA.o: BayesA.f90
+	$(comp) -c $(optfor90) -o BayesA.o BayesA.f90
+	
+MarkerEffectPostProcessing.o: MarkerEffectPostProcessing.f90	
+	$(comp) -c $(optfor90) -o MarkerEffectPostProcessing.o MarkerEffectPostProcessing.f90
+	
 gasdev.o: gasdev.f90
 	$(comp) -c $(optfor90) -o gasdev.o gasdev.f90
+
+random_gamma.o: random_gamma.f90
+	$(comp) -c $(optfor90) -o random_gamma.o random_gamma.f90
 
 momentR4.o: momentR4.f90
 	$(comp) -c $(optfor90) -o momentR4.o momentR4.f90
