@@ -1,21 +1,21 @@
 comp := ifort
-#opt := -fast -static
-opt := -O3 -static
+#opt := -fast # does additional stuff beyond -O3, but needs testing!!!
+opt := -O3
 
 # MS Windows
 ifeq (${OS}, Windows_NT)
-  opt := ${opt} -Qmkl -Qlocation,link,"${VCINSTALLDIR}/bin"
+  opt := ${opt} -static -Qmkl -Qlocation,link,"${VCINSTALLDIR}/bin"
   obj := .obj
   exe := .exe
 else
 # Linux or Mac OSX
   obj := .o
   exe :=
-  opt := ${opt} -mkl
+  opt := ${opt} -mkl -static-intel
   uname := ${shell uname}
   # Linux only
   ifeq ($(uname), Linux)
-    opt := ${opt} -static-intel -static-libgcc -static-libstdc++
+    opt := ${opt} -static -static-libgcc -static-libstdc++
   endif
 endif
 
