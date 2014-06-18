@@ -1,9 +1,10 @@
 comp := ifort
-opt := -fast -static-intel
+#opt := -fast -static
+opt := -O3 -static
 
 # MS Windows
 ifeq (${OS}, Windows_NT)
-  opt = ${opt} -Qmkl -Qlocation,link,"${VCINSTALLDIR}/bin"
+  opt := ${opt} -Qmkl -Qlocation,link,"${VCINSTALLDIR}/bin"
   obj := .obj
   exe := .exe
 else
@@ -14,7 +15,7 @@ else
   uname := ${shell uname}
   # Linux only
   ifeq ($(uname), Linux)
-    opt := ${opt} -static -static-libgcc -static-libstdc++
+    opt := ${opt} -static-intel -static-libgcc -static-libstdc++
   endif
 endif
 
