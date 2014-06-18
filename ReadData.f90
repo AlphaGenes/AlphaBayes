@@ -4,7 +4,7 @@ subroutine ReadData
 use Global
 implicit none
 
-integer :: i,j
+integer :: i,j,nMissing
 character(len=100) :: dumC
 real(4) :: ave,adev,sdev,var,skew,curt
 real(4) :: TmpAlleleFreq,TmpExpVarX,SumExpVarX,TmpObsVarX,SumObsVarX
@@ -55,7 +55,17 @@ SumExpVarX=0.0
 SumObsVarX=0.0
 Sum2pq=0.0
 do j=1,nSnp
-	call momentR4(GenosTr(:,j),nAnisTr,ave,adev,sdev,var,skew,curt)
+
+  	nMissing=0
+  	do i=1,nAnisTr
+		if ((GenosTr(i,j)>-0.1).and.(GenosTr(i,j)<2.1)) then
+	  		AlleleFreq(j)=AlleleFreq(j)+GenosTr(i,j)
+		else
+	  		nMissing=nMissing+1
+		endif
+	enddo
+  	call momentR4(AlleleFreq(j),nAnisTr,ave,adev,sdev,var,skew,curt)
+
 	TmpAlleleFreq=ave/2
 	AlleleFreq(j)=TmpAlleleFreq
 	write (105,*) j,AlleleFreq(j)
