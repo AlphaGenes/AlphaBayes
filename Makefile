@@ -1,57 +1,65 @@
-comp=ifort
-opt= -zero -nowarn
-#opt= -lpthread -nbs -zero -nowarn
-optfor90= -mkl -O3 $(opt)
-#optfor90= -g -traceback $(opt)
-uname := ${shell uname}
-ifneq ($(uname), Linux)
-  optfor90 := $(optfor90) -i-static
+comp := ifort
+
+ifeq (${OS}, Windows_NT)
+  opt := -Qmkl -O3 -Qlocation,link,"${VCINSTALLDIR}/bin"
+  obj := .obj
+  exe := .exe
+else
+  uname := ${shell uname}
+  obj := .o
+  exe :=
+  ifeq ($(uname), Linux)
+    opt := -mkl -O3 -i-static
+  endif
 endif
 
-AlphaBayes: AlphaBayes.f90 Global.o ReadParam.o ReadData.o InitiateSeed.o PearsnR4.o \
-	RidgeRegression.o BayesA.o MarkerEffectPostProcessing.o gasdev.o random_gamma.o momentR4.o ran1.o random_order.o
-	$(comp) $(optfor90) AlphaBayes.f90 Global.o ReadParam.o ReadData.o InitiateSeed.o PearsnR4.o \
-	RidgeRegression.o BayesA.o MarkerEffectPostProcessing.o gasdev.o random_gamma.o momentR4.o ran1.o random_order.o \
+AlphaBayes: AlphaBayes.f90 Global${obj} ReadParam${obj} ReadData${obj} InitiateSeed${obj} PearsnR4${obj} \
+	RidgeRegression${obj} BayesA${obj} MarkerEffectPostProcessing${obj} gasdev${obj} random_gamma${obj} momentR4${obj} ran1${obj} random_order${obj}
+	$(comp) $(opt) AlphaBayes.f90 Global${obj} ReadParam${obj} ReadData${obj} InitiateSeed${obj} PearsnR4${obj} \
+	RidgeRegression${obj} BayesA${obj} MarkerEffectPostProcessing${obj} gasdev${obj} random_gamma${obj} momentR4${obj} ran1${obj} random_order${obj} \
 	  -o AlphaBayes
 
-Global.o: Global.f90
-	$(comp) -c $(optfor90) -o Global.o Global.f90
+Global${obj}: Global.f90
+	$(comp) -c $(opt) -o Global${obj} Global.f90
 
-ReadParam.o: ReadParam.f90
-	$(comp) -c $(optfor90) -o ReadParam.o ReadParam.f90
+ReadParam${obj}: ReadParam.f90
+	$(comp) -c $(opt) -o ReadParam${obj} ReadParam.f90
 
-ReadData.o: ReadData.f90
-	$(comp) -c $(optfor90) -o ReadData.o ReadData.f90
+ReadData${obj}: ReadData.f90
+	$(comp) -c $(opt) -o ReadData${obj} ReadData.f90
 
-InitiateSeed.o: InitiateSeed.f90
-	$(comp) -c $(optfor90) -o InitiateSeed.o InitiateSeed.f90
+InitiateSeed${obj}: InitiateSeed.f90
+	$(comp) -c $(opt) -o InitiateSeed${obj} InitiateSeed.f90
 
-PearsnR4.o: PearsnR4.f90
-	$(comp) -c $(optfor90) -o PearsnR4.o PearsnR4.f90
+PearsnR4${obj}: PearsnR4.f90
+	$(comp) -c $(opt) -o PearsnR4${obj} PearsnR4.f90
 
-RidgeRegression.o: RidgeRegression.f90
-	$(comp) -c $(optfor90) -o RidgeRegression.o RidgeRegression.f90
+RidgeRegression${obj}: RidgeRegression.f90
+	$(comp) -c $(opt) -o RidgeRegression${obj} RidgeRegression.f90
 
-BayesA.o: BayesA.f90
-	$(comp) -c $(optfor90) -o BayesA.o BayesA.f90
+BayesA${obj}: BayesA.f90
+	$(comp) -c $(opt) -o BayesA${obj} BayesA.f90
 	
-MarkerEffectPostProcessing.o: MarkerEffectPostProcessing.f90	
-	$(comp) -c $(optfor90) -o MarkerEffectPostProcessing.o MarkerEffectPostProcessing.f90
+MarkerEffectPostProcessing${obj}: MarkerEffectPostProcessing.f90	
+	$(comp) -c $(opt) -o MarkerEffectPostProcessing${obj} MarkerEffectPostProcessing.f90
 	
-gasdev.o: gasdev.f90
-	$(comp) -c $(optfor90) -o gasdev.o gasdev.f90
+gasdev${obj}: gasdev.f90
+	$(comp) -c $(opt) -o gasdev${obj} gasdev.f90
 
-random_gamma.o: random_gamma.f90
-	$(comp) -c $(optfor90) -o random_gamma.o random_gamma.f90
+random_gamma${obj}: random_gamma.f90
+	$(comp) -c $(opt) -o random_gamma${obj} random_gamma.f90
 
-momentR4.o: momentR4.f90
-	$(comp) -c $(optfor90) -o momentR4.o momentR4.f90
+momentR4${obj}: momentR4.f90
+	$(comp) -c $(opt) -o momentR4${obj} momentR4.f90
 
-ran1.o: ran1.f90
-	$(comp) -c $(optfor90) -o ran1.o ran1.f90
+ran1${obj}: ran1.f90
+	$(comp) -c $(opt) -o ran1${obj} ran1.f90
 
-random_order.o: random_order.f90
-	$(comp) -c $(optfor90) -o random_order.o random_order.f90
+random_order${obj}: random_order.f90
+	$(comp) -c $(opt) -o random_order${obj} random_order.f90
 
 clean:
-	rm -f *.o *.mod *.lst
+	rm -f *${obj} *.mod *.lst
+
+cleanall:
+	rm -f AlphaBayes${exe}
