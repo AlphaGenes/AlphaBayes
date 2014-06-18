@@ -1,23 +1,28 @@
 comp := ifort
+opt := -fast -static-intel
 
+# MS Windows
 ifeq (${OS}, Windows_NT)
-  opt := -Qmkl -O3 -Qlocation,link,"${VCINSTALLDIR}/bin"
+  opt = ${opt} -Qmkl -Qlocation,link,"${VCINSTALLDIR}/bin"
   obj := .obj
   exe := .exe
 else
-  uname := ${shell uname}
+# Linux or Mac OSX
   obj := .o
   exe :=
+  opt := ${opt} -mkl
+  uname := ${shell uname}
+  # Linux only
   ifeq ($(uname), Linux)
-    opt := -mkl -O3 -i-static
+    opt := ${opt} -static -static-libgcc -static-libstdc++
   endif
 endif
 
-AlphaBayes: AlphaBayes.f90 Global${obj} ReadParam${obj} ReadData${obj} InitiateSeed${obj} PearsnR4${obj} \
+AlphaBayes: Makefile AlphaBayes.f90 Global${obj} ReadParam${obj} ReadData${obj} InitiateSeed${obj} PearsnR4${obj} \
 	RidgeRegression${obj} BayesA${obj} MarkerEffectPostProcessing${obj} gasdev${obj} random_gamma${obj} momentR4${obj} ran1${obj} random_order${obj}
 	$(comp) $(opt) AlphaBayes.f90 Global${obj} ReadParam${obj} ReadData${obj} InitiateSeed${obj} PearsnR4${obj} \
-	RidgeRegression${obj} BayesA${obj} MarkerEffectPostProcessing${obj} gasdev${obj} random_gamma${obj} momentR4${obj} ran1${obj} random_order${obj} \
-	  -o AlphaBayes
+		RidgeRegression${obj} BayesA${obj} MarkerEffectPostProcessing${obj} gasdev${obj} random_gamma${obj} momentR4${obj} ran1${obj} random_order${obj} \
+		-o AlphaBayes
 
 Global${obj}: Global.f90
 	$(comp) -c $(opt) -o Global${obj} Global.f90
@@ -39,10 +44,10 @@ RidgeRegression${obj}: RidgeRegression.f90
 
 BayesA${obj}: BayesA.f90
 	$(comp) -c $(opt) -o BayesA${obj} BayesA.f90
-	
-MarkerEffectPostProcessing${obj}: MarkerEffectPostProcessing.f90	
+
+MarkerEffectPostProcessing${obj}: MarkerEffectPostProcessing.f90
 	$(comp) -c $(opt) -o MarkerEffectPostProcessing${obj} MarkerEffectPostProcessing.f90
-	
+
 gasdev${obj}: gasdev.f90
 	$(comp) -c $(opt) -o gasdev${obj} gasdev.f90
 
@@ -59,7 +64,7 @@ random_order${obj}: random_order.f90
 	$(comp) -c $(opt) -o random_order${obj} random_order.f90
 
 clean:
-	rm -f *${obj} *.mod *.lst
+	rm -f *${obj} *.mod
 
-cleanall:
+cleanall: clean
 	rm -f AlphaBayes${exe}
