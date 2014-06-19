@@ -4,14 +4,14 @@ opt := -O3
 
 # MS Windows
 ifeq (${OS}, Windows_NT)
-  opt := ${opt} -static -Qmkl -Qlocation,link,"${VCINSTALLDIR}/bin"
+  opt := ${opt} -static -Qopenmp-link:static -Qmkl -Qlocation,link,"${VCINSTALLDIR}/bin"
   obj := .obj
   exe := .exe
 else
 # Linux or Mac OSX
   obj := .o
   exe :=
-  opt := ${opt} -mkl -static-intel
+  opt := ${opt} -mkl -static-intel -openmp-link=static
   uname := ${shell uname}
   # Linux only
   ifeq ($(uname), Linux)
@@ -25,43 +25,43 @@ AlphaBayes: Makefile AlphaBayes.f90 Global${obj} ReadParam${obj} ReadData${obj} 
 		RidgeRegression${obj} BayesA${obj} MarkerEffectPostProcessing${obj} gasdev${obj} random_gamma${obj} momentR4${obj} ran1${obj} random_order${obj} \
 		-o AlphaBayes
 
-Global${obj}: Global.f90
+Global${obj}: Makefile Global.f90
 	$(comp) -c $(opt) -o Global${obj} Global.f90
 
-ReadParam${obj}: ReadParam.f90
+ReadParam${obj}: Makefile ReadParam.f90
 	$(comp) -c $(opt) -o ReadParam${obj} ReadParam.f90
 
-ReadData${obj}: ReadData.f90
+ReadData${obj}: Makefile ReadData.f90
 	$(comp) -c $(opt) -o ReadData${obj} ReadData.f90
 
-InitiateSeed${obj}: InitiateSeed.f90
+InitiateSeed${obj}: Makefile InitiateSeed.f90
 	$(comp) -c $(opt) -o InitiateSeed${obj} InitiateSeed.f90
 
-PearsnR4${obj}: PearsnR4.f90
+PearsnR4${obj}: Makefile PearsnR4.f90
 	$(comp) -c $(opt) -o PearsnR4${obj} PearsnR4.f90
 
-RidgeRegression${obj}: RidgeRegression.f90
+RidgeRegression${obj}: Makefile RidgeRegression.f90
 	$(comp) -c $(opt) -o RidgeRegression${obj} RidgeRegression.f90
 
-BayesA${obj}: BayesA.f90
+BayesA${obj}: Makefile BayesA.f90
 	$(comp) -c $(opt) -o BayesA${obj} BayesA.f90
 
-MarkerEffectPostProcessing${obj}: MarkerEffectPostProcessing.f90
+MarkerEffectPostProcessing${obj}: Makefile MarkerEffectPostProcessing.f90
 	$(comp) -c $(opt) -o MarkerEffectPostProcessing${obj} MarkerEffectPostProcessing.f90
 
-gasdev${obj}: gasdev.f90
+gasdev${obj}: Makefile gasdev.f90
 	$(comp) -c $(opt) -o gasdev${obj} gasdev.f90
 
-random_gamma${obj}: random_gamma.f90
+random_gamma${obj}: Makefile random_gamma.f90
 	$(comp) -c $(opt) -o random_gamma${obj} random_gamma.f90
 
-momentR4${obj}: momentR4.f90
+momentR4${obj}: Makefile momentR4.f90
 	$(comp) -c $(opt) -o momentR4${obj} momentR4.f90
 
-ran1${obj}: ran1.f90
+ran1${obj}: Makefile ran1.f90
 	$(comp) -c $(opt) -o ran1${obj} ran1.f90
 
-random_order${obj}: random_order.f90
+random_order${obj}: Makefile random_order.f90
 	$(comp) -c $(opt) -o random_order${obj} random_order.f90
 
 clean:
