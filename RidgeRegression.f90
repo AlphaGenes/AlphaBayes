@@ -11,9 +11,10 @@ allocate(XpX(nSnp,1))
 allocate(Xg(nAnisTr,1))
 allocate(Lambda(nSnp))
 
-myone=1.d0
-myzero=0.d0
+myone=1.0
+myzero=0.0
 One=1
+Mu=0.0
 
 !Construct XpX
 do j=1,nSnp
@@ -21,8 +22,7 @@ do j=1,nSnp
 	Lambda(j)=VarE/(VarA/nSnp)
 enddo
 
-Mu=0.00
-E(:,1)=Phen(:,1)-Mu !GG
+E(:,1)=Phen(:,1)
 
 do h=1,nRound
 	eps=0.0
