@@ -64,7 +64,7 @@ do j=1,nSnp
 	  		nMissing=nMissing+1
 		endif
 	enddo
-  	call momentR4(AlleleFreq(j),nAnisTr,ave,adev,sdev,var,skew,curt)
+  	call momentR4(GenosTr(i,:),nAnisTr,ave,adev,sdev,var,skew,curt)
 
 	TmpAlleleFreq=ave/2
 	AlleleFreq(j)=TmpAlleleFreq
