@@ -15,6 +15,7 @@ myone=1.0
 myzero=0.0
 One=1
 Mu=0.0
+G=0.000001
 
 !Construct XpX
 do j=1,nSnp
@@ -40,7 +41,6 @@ do h=1,nRound
 		snpid=RandomOrdering(j)
 
 		E(:,1)=E(:,1)+(GenosTr(:,snpid)*G(snpid,1))
-		
 		Lhs=XpX(snpid,1)+Lambda(snpid)
 		Rhs=sdot(nAnisTr, GenosTr(:,snpid), 1, E(:,1), 1)
 
