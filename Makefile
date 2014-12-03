@@ -6,6 +6,7 @@ opt := -O3
 
 # MS Windows
 ifeq (${OS}, Windows_NT)
+  ## see also https://software.intel.com/en-us/compiler_winapp_f (2014-12-03)
   opt := ${opt} -static -Qopenmp-link:static -Qmkl -Qlocation,link,"${VCINSTALLDIR}/bin"
   obj := .obj
   exe := .exe
