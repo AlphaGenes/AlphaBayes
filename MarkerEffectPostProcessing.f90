@@ -28,22 +28,24 @@ do i=1,nSnpExternal
 		j=j+1
 		SnpOut(i)=G(j,1)
 	endif
-	write (1002,*) i,SnpOut(i)
+	write (1002,'(i20,f20.10)') i,SnpOut(i)
 enddo
 
 close(1002)
 flush(1002)
 
-open (unit=1001,file="TbvEbv.txt",status="unknown")
+open (unit=1001,file="Ebv.txt",status="unknown")				! Before was "TbvEbv.txt"
 
 call sgemm('n','n',nAnisTe,One,nSnp,myone,GenosTe,nAnisTe,G,nSnp,myzero,Ebv,nAnisTe)
+
 do i=1,nAnisTe
-	write(1001,*) i,Tbv(i,1),Ebv(i,1)
+	write(1001,'(i20,2f20.10)') GenoTeId(i),Ebv(i,1)			! To be directly used in AlphaDrop, the TBV are no more printed in this file. The TBV can be found
+																! in the files "SelectionPedTbvTesting.txt" and "SelectionPedTbvTestingRecomb.txt", which are used by AlphaBayes.
 enddo
 close(1001)
 
 call PearsnR4 (Tbv(:,1),Ebv(:,1),nAnisTe,Correlation)
-print*, Correlation
+
 open (unit=1001,file="TbvEbvCorrelation.txt",status="unknown")
   write(1001,*) Correlation
 flush(1002)

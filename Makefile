@@ -2,11 +2,8 @@ comp := ifort
 #opt := -fast # does additional stuff beyond -O3, but needs testing!!!
 opt := -O3
 
-# TODO: make use of the Makefile.AlphaProject, but also port Windows stuff there!!!
-
 # MS Windows
 ifeq (${OS}, Windows_NT)
-  ## see also https://software.intel.com/en-us/compiler_winapp_f (2014-12-03)
   opt := ${opt} -static -Qopenmp-link:static -Qmkl -Qlocation,link,"${VCINSTALLDIR}/bin"
   obj := .obj
   exe := .exe

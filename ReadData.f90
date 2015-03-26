@@ -18,6 +18,7 @@ open (unit=105,file="AlleleFreq.txt",status="unknown")
 allocate(SnpTmp(nSnpExternal))
 allocate(GenosTr(nAnisTr,nSnp))
 allocate(GenosTe(nAnisTe,nSnp))
+allocate(GenoTeId(nAnisTe))
 allocate(Phen(nAnisTr,1))
 allocate(E(nAnisTr,1))
 allocate(G(nSnp,1))
@@ -46,7 +47,7 @@ Phen(:,1)=(Phen(:,1)-ave)/sdev
 VarY=var
 
 do i=1,nAnisTe
-	read (103,*) dumC,SnpTmp(:)
+	read (103,*) GenoTeId(i),SnpTmp(:)
 	GenosTe(i,:)=SnpTmp(SnpPosition(:))
 	read (104,*) dumC,Tbv(i,1)
 enddo
@@ -87,7 +88,7 @@ do j=1,nSnp
 		if ((GenosTe(i,j)<-0.1).or.(GenosTe(i,j)>2.1)) then
 			GenosTe(i,j)=2.0*AlleleFreq(j)
 		endif
-	enddo	
+	enddo
 	
 	TmpExpVarX=2.0*(1.0-TmpAlleleFreq)*TmpAlleleFreq+0.00001
 	Sum2pq=Sum2pq+TmpExpVarX
@@ -98,9 +99,9 @@ do j=1,nSnp
   	! Center
 	GenosTr(:,j)=GenosTr(:,j)-(2.0*AlleleFreq(j))
 	GenosTe(:,j)=GenosTe(:,j)-(2.0*AlleleFreq(j))	
-	
+
 	if(ScalingOpt==2) then
-	  	! Scale by marker specific variance - expected
+		! Scale by marker specific variance - expected
 	  	TmpExpVarX=sqrt(TmpExpVarX)
 	  	GenosTr(:,j)=GenosTr(:,j)/TmpExpVarX
 	  	GenosTe(:,j)=GenosTe(:,j)/TmpExpVarX
