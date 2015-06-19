@@ -1,0 +1,17 @@
+GenotypeTraining   ,GenoTrain.csv
+GenotypeTesting    ,GenoTest.csv
+PhenotypeTraining  ,PhenoTrain.csv
+TbvTesting         ,PhenoTest.csv
+FixedSnpFile       ,None
+nSnp               ,2920
+nAnisTr            ,215
+nAnisTe            ,100
+nRound             ,100
+nBurn              ,10
+VareA              ,0.5
+VarE               ,0.5
+NumberOfProcessors ,3
+ScalingOption      ,4
+MissingGenoCode    ,9
+MarkerSolver       ,Ridge
+
