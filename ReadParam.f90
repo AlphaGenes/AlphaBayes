@@ -38,7 +38,6 @@ subroutine ReadParam
 	read(UnitSpec,*) DumC,VarE
 	read(UnitSpec,*) DumC,nProcessors
 	read(UnitSpec,*) DumC,ScalingOpt
-	read(UnitSpec,*) DumC,MissingGenoCode
 	read(UnitSpec,*) DumC,MarkerSolver
 
 	call OMP_SET_NUM_THREADS(nProcessors)

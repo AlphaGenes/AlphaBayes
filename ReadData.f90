@@ -100,14 +100,14 @@ subroutine ReadData
 		GenosTr(:,j)=GenosTr(:,j)-(2.0*AlleleFreq(j))
 		GenosTe(:,j)=GenosTe(:,j)-(2.0*AlleleFreq(j))
 
-		if(ScalingOpt==2) then
+		if (ScalingOpt==2) then
 			! Scale by marker specific variance - expected
 		  	TmpExpVarX=sqrt(TmpExpVarX)
 		  	GenosTr(:,j)=GenosTr(:,j)/TmpExpVarX
 		  	GenosTe(:,j)=GenosTe(:,j)/TmpExpVarX
 		endif
 
-		if(ScalingOpt==3) then
+		if (ScalingOpt==3) then
 			! Scale by marker specific variance - observed
 		  	TmpObsVarX=sqrt(TmpObsVarX)
 		  	GenosTr(:,j)=GenosTr(:,j)/TmpObsVarX
@@ -116,13 +116,13 @@ subroutine ReadData
 
 	enddo
 
-	if(ScalingOpt==4) then
+	if (ScalingOpt==4) then
 	  	! Scale by average marker variance - expected
 	  	TmpExpVarX=sqrt(SumExpVarX/float(nSnp)
 	  	GenosTr(:,:)=GenosTr(:,:)/TmpExpVarX
 	  	GenosTe(:,:)=GenosTe(:,:)/TmpExpVarX
 	endif
-	if(ScalingOpt==5) then
+	if (ScalingOpt==5) then
 	  	! Scale by average marker variance - observed
 	  	TmpObsVarX=sqrt(SumObsVarX/float(nSnp))
 	  	GenosTr(:,:)=GenosTr(:,:)/TmpObsVarX

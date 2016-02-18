@@ -47,7 +47,7 @@ subroutine MarkerEffectPostProcessing
 	flush(UnitEbv)
 
 	open(newunit=UnitCor,file="TbvEbvCorrelation.txt",status="unknown")
-	call PearsnR4 (Tbv(:,1),Ebv(:,1),nAnisTe,Correlation)
+	call PearsnR4(Tbv(:,1),Ebv(:,1),nAnisTe,Correlation)
     write(UnitCor,"(f13.10)") Correlation
 	close(UnitCor)
 	flush(UnitCor)

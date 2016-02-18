@@ -55,7 +55,7 @@ subroutine RidgeRegressionMCMC
 	do h=1,nRound
 		!             123456789 123456789 123456789 123456789 123456789 123456
 		write(6,100) " Ridge regression (MCMC for all model parameters) round ",h
-		100 format("+", a56,i10)
+		100 format("+",a56,i10)
 
 		! Residual variance
 		EpE=sdot(nAnisTr,E(:,1),1,E(:,1),1) + ES0 + 0.000000000000001

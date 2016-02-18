@@ -31,7 +31,7 @@ subroutine RidgeRegression
 	do h=1,nRound
 		!             123456789 123456789 123456789 123456789 123456789 12
 		write(6,100) " Ridge regression (fixed variance components) round ",h
-		100 format ("+", a52,i10)
+		100 format("+",a52,i10)
 
 		!Intercept
 		E(:,1)=E(:,1)+Mu

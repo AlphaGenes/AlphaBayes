@@ -43,7 +43,7 @@ subroutine BayesA
 	do h=1,nRound
 		!             123456789 1234
 		write(6,100) " BayesA round ",h
-		100 format('+', a14,i10)
+		100 format('+',a14,i10)
 
 		! Residual variance
 		EpE=sdot(nAnisTr, E(:,1), 1, E(:,1), 1) + 0.000000000000001
