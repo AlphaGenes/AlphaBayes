@@ -1,49 +1,47 @@
 !##################################################################################################################################
 
 subroutine ReadParam
-use Global
-implicit none
-include 'omp_lib.h' ! for omp_get_time
+	use Global
+	implicit none
+	!include 'omp_lib.h' ! for omp_get_time
 
-character(len=100) :: dumC
-integer :: i
+	character(len=100) :: DumC
+	integer :: i,UnitSpec,UnitFixedSnp
 
+	open(newunit=UnitSpec,file="AlphaBayesSpec.txt",status="old")
 
-open (unit=100,file="AlphaBayesSpec.txt",status="old")
+	read(UnitSpec,*) DumC,GenoTrFile
+	read(UnitSpec,*) DumC,GenoTeFile
+	read(UnitSpec,*) DumC,PhenoTrFile
+	read(UnitSpec,*) DumC,TbvFile
+	read(UnitSpec,*) DumC,FileFixedSnp
+	read(UnitSpec,*) DumC,nSnpExternal
 
-read (100,*) dumC,GenoTrFile
-read (100,*) dumC,GenoTeFile
-read (100,*) dumC,PhenoTrFile
-read (100,*) dumC,TbvFile
-read (100,*) dumC,FileFixedSnp
-read (100,*) dumC,nSnpExternal
+	if (trim(FileFixedSnp)/="None") then
+		open(newunit=UnitFixedSnp,file=trim(FileFixedSnp),status="old")
+		allocate(FixedSnp(nSnpExternal))
+		do i=1,nSnpExternal
+			read(UnitFixedSnp,*) FixedSnp(i)
+		enddo
+		nSnp=sum(FixedSnp(:))
+	else
+		nSnp=nSnpExternal
+		allocate(FixedSnp(nSnpExternal))
+		FixedSnp=1
+	endif
 
-if (trim(FileFixedSnp)/="None") then
-	open (unit=10,file=trim(FileFixedSnp),status="old")
-	allocate(FixedSnp(nSnpExternal))
-	do i=1,nSnpExternal
-		read (10,*) FixedSnp(i)
-	enddo
-	nSnp=sum(FixedSnp(:))
-else
-	nSnp=nSnpExternal
-	allocate(FixedSnp(nSnpExternal))
-	FixedSnp=1
-endif
+	read(UnitSpec,*) DumC,nAnisTr
+	read(UnitSpec,*) DumC,nAnisTe
+	read(UnitSpec,*) DumC,nRound
+	read(UnitSpec,*) DumC,nBurn
+	read(UnitSpec,*) DumC,VarA
+	read(UnitSpec,*) DumC,VarE
+	read(UnitSpec,*) DumC,nProcessors
+	read(UnitSpec,*) DumC,ScalingOpt
+	read(UnitSpec,*) DumC,MissingGenoCode
+	read(UnitSpec,*) DumC,MarkerSolver
 
-read (100,*) dumC,nAnisTr
-read (100,*) dumC,nAnisTe
-read (100,*) dumC,nRound
-read (100,*) dumC,nBurn
-read (100,*) dumC,VarA
-read (100,*) dumC,VarE
-read (100,*) dumC,nProcessors
-read (100,*) dumC,ScalingOpt
-read (100,*) dumC,MissingGenoCode
-read (100,*) dumC,MarkerSolver
-
-call OMP_SET_NUM_THREADS(nProcessors)
-
+	call OMP_SET_NUM_THREADS(nProcessors)
 end subroutine ReadParam
 
 !##################################################################################################################################
