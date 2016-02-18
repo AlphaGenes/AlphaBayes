@@ -15,8 +15,15 @@ subroutine MarkerEffectPostProcessing
 	! Rescale back to phenotype scale
 	G(:,1)=G(:,1)*sqrt(VarY)
 
+	! y = Mu + Xb + e
+	! (y-MuY)/SdY = (Intercept + Xb + e)/SdY
+    ! y' = Intercept/SdY + Xb/SdY + e'
+    ! y' = Intercept' + Xb' + e'
+	! y' = Intercept' + (X-MuX)/SdX*b' + e'
+	! y' = Intercept'' + X'*b' + e'
+
 	! Output section
-	open(unit=UnitSnpSol,file="SnpSolutions.txt",status="unknown")
+	open(newunit=UnitSnpSol,file="SnpSolutions.txt",status="unknown")
 	allocate(SnpOut(nSnpExternal))
 	SnpOut=0.0
 	j=0
@@ -30,7 +37,7 @@ subroutine MarkerEffectPostProcessing
 	close(UnitSnpSol)
 	flush(UnitSnpSol)
 
-	open(unit=UnitEbv,file="Ebv.txt",status="unknown")				! Before was "TbvEbv.txt"
+	open(newunit=UnitEbv,file="Ebv.txt",status="unknown")		    ! Before was "TbvEbv.txt"
 	call sgemm("n","n",nAnisTe,One,nSnp,myone,GenosTe,nAnisTe,G,nSnp,myzero,Ebv,nAnisTe)
 	do i=1,nAnisTe
 		write(UnitEbv,"(i20,2f20.10)") GenoTeId(i),Ebv(i,1)			! To be directly used in AlphaDrop, the TBV are no more printed in this file. The TBV can be found
@@ -39,7 +46,7 @@ subroutine MarkerEffectPostProcessing
 	close(UnitEbv)
 	flush(UnitEbv)
 
-	open(unit=1001,file="TbvEbvCorrelation.txt",status="unknown")
+	open(newunit=UnitCor,file="TbvEbvCorrelation.txt",status="unknown")
 	call PearsnR4 (Tbv(:,1),Ebv(:,1),nAnisTe,Correlation)
     write(UnitCor,"(f13.10)") Correlation
 	close(UnitCor)

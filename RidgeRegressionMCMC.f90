@@ -82,7 +82,7 @@ subroutine RidgeRegressionMCMC
 			E(:,1)=E(:,1)+(GenosTr(:,snpid)*G(snpid,1))
 			Lhs=XpX(snpid,1)+LambdaSnp
 			Rhs=sdot(nAnisTr,GenosTr(:,snpid),One,E(:,1),One)
-			G(snpid,1)=(Rhs/Lhs)+(gasdev(idum)*sqrt(1/Lhs))
+			G(snpid,1)=(Rhs/Lhs)+(gasdev(idum)*sqrt(1.0/Lhs))
 			E(:,1)=E(:,1)-(GenosTr(:,snpid)*G(snpid,1))
 		enddo
 		if (h>nBurn) then

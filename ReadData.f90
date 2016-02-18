@@ -11,9 +11,9 @@ subroutine ReadData
 	real(4) :: TmpAlleleFreq,TmpExpVarX,SumExpVarX,TmpObsVarX,SumObsVarX
 
 	open(newunit=UnitGenoTr,file=trim(GenoTrFile),status="old")
-	open(newunit=UnitPhenoTr,file=trim(PhenoTrFile),status="old")
 	open(newunit=UnitGenoTe,file=trim(GenoTeFile),status="old")
-	open(newunit=UnitPhenoTe,file=trim(TbvFile),status="old")
+	open(newunit=UnitPhenoTr,file=trim(PhenoTrFile),status="old")
+	open(newunit=UnitPhenoTe,file=trim(PhenoTeFile),status="old")
 	open(newunit=UnitAlleleFreq,file="AlleleFreq.txt",status="unknown")
 
 	allocate(SnpTmp(nSnpExternal))
@@ -26,8 +26,8 @@ subroutine ReadData
 	allocate(Tbv(nAnisTe,1))
 	allocate(Ebv(nAnisTe,1))
 	allocate(AlleleFreq(nSnp))
-
 	allocate(SnpPosition(nSnp))
+
 	j=0
 	do i=1,nSnpExternal
 		if (FixedSnp(i)==1) then
@@ -70,8 +70,7 @@ subroutine ReadData
 			endif
 		enddo
 		if (nNotMissing/=0) then
-			AlleleFreq(j)=AlleleFreq(j)/nNotMissing
-			AlleleFreq(j)=AlleleFreq(j)/2
+			AlleleFreq(j)=AlleleFreq(j)/float(2*nNotMissing)
 		else
 			AlleleFreq(j)=0.0
 		endif
@@ -119,13 +118,13 @@ subroutine ReadData
 
 	if(ScalingOpt==4) then
 	  	! Scale by average marker variance - expected
-	  	TmpExpVarX=sqrt(SumExpVarX/nSnp)
+	  	TmpExpVarX=sqrt(SumExpVarX/float(nSnp)
 	  	GenosTr(:,:)=GenosTr(:,:)/TmpExpVarX
 	  	GenosTe(:,:)=GenosTe(:,:)/TmpExpVarX
 	endif
 	if(ScalingOpt==5) then
 	  	! Scale by average marker variance - observed
-	  	TmpObsVarX=sqrt(SumObsVarX/nSnp)
+	  	TmpObsVarX=sqrt(SumObsVarX/float(nSnp))
 	  	GenosTr(:,:)=GenosTr(:,:)/TmpObsVarX
 	  	GenosTe(:,:)=GenosTe(:,:)/TmpObsVarX
 	endif

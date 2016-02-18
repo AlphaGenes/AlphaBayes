@@ -13,7 +13,7 @@ subroutine ReadParam
 	read(UnitSpec,*) DumC,GenoTrFile
 	read(UnitSpec,*) DumC,GenoTeFile
 	read(UnitSpec,*) DumC,PhenoTrFile
-	read(UnitSpec,*) DumC,TbvFile
+	read(UnitSpec,*) DumC,PhenoTeFile
 	read(UnitSpec,*) DumC,FileFixedSnp
 	read(UnitSpec,*) DumC,nSnpExternal
 

@@ -20,9 +20,9 @@ else
 endif
 
 AlphaBayes: Makefile AlphaBayes.f90 Global${obj} ReadParam${obj} ReadData${obj} InitiateSeed${obj} PearsnR4${obj} \
-	RidgeRegression${obj} BayesA${obj} MarkerEffectPostProcessing${obj} gasdev${obj} random_gamma${obj} momentR4${obj} ran1${obj} random_order${obj}
+	RidgeRegression${obj} RidgeRegressionMCMC${obj} BayesA${obj} MarkerEffectPostProcessing${obj} gasdev${obj} random_gamma${obj} momentR4${obj} ran1${obj} random_order${obj}
 	$(comp) $(opt) AlphaBayes.f90 Global${obj} ReadParam${obj} ReadData${obj} InitiateSeed${obj} PearsnR4${obj} \
-		RidgeRegression${obj} BayesA${obj} MarkerEffectPostProcessing${obj} gasdev${obj} random_gamma${obj} momentR4${obj} ran1${obj} random_order${obj} \
+		RidgeRegression${obj} RidgeRegressionMCMC${obj} BayesA${obj} MarkerEffectPostProcessing${obj} gasdev${obj} random_gamma${obj} momentR4${obj} ran1${obj} random_order${obj} \
 		-o AlphaBayes
 
 Global${obj}: Makefile Global.f90
@@ -42,6 +42,9 @@ PearsnR4${obj}: Makefile PearsnR4.f90
 
 RidgeRegression${obj}: Makefile RidgeRegression.f90
 	$(comp) -c $(opt) -o RidgeRegression${obj} RidgeRegression.f90
+
+RidgeRegressionMCMC${obj}: Makefile RidgeRegressionMCMC.f90
+	$(comp) -c $(opt) -o RidgeRegressionMCMC${obj} RidgeRegressionMCMC.f90
 
 BayesA${obj}: Makefile BayesA.f90
 	$(comp) -c $(opt) -o BayesA${obj} BayesA.f90
