@@ -1,31 +1,33 @@
-!###########################################################################################################################################################
+!###############################################################################
 
 subroutine RidgeRegression
 	use Global
 	implicit none
 
-	real(4) :: sdot,Eps,InvLhs,Rhs,Lhs,SolOld,myone,myzero,nAnisTrR
-	integer :: i,h,j,snpid,RandomOrdering(nSnp),One
+	integer :: i,h,j,snpid,RandomOrdering(nSnp)
+
+	real(4) :: sdot,Eps,InvLhs,Rhs,Lhs,SolOld,OneR,ZeroR,nAnisTrR,LambdaSnp
+	real(4),allocatable :: XpX(:,:),Xg(:,:),E(:,:)
 
 	allocate(XpX(nSnp,1))
 	allocate(Xg(nAnisTr,1))
-	allocate(Lambda(nSnp))
+	allocate(E(nAnisTr,1))
 
-	myone=1.0
-	myzero=0.0
-	One=1
+	OneR=1.0
+	ZeroR=0.0
 	Mu=0.0
 	G=0.000001
 	nAnisTrR=float(nAnisTr)
 
 	! Construct XpX and Lambda
 	do j=1,nSnp
-		XpX(j,1)=sdot(nAnisTr,GenosTr(:,j),One,GenosTr(:,j),One) + 0.000000000000001
-		Lambda(j)=VarE/(VarA/float(nSnp))
+		XpX(j,1)=sdot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + 0.000000000000001
 	enddo
 
+	LambdaSnp=VarE/(VarA/float(nSnp))
+
 	! Working phenotypes
-	E(:,1)=Phen(:,1)
+	E(:,1)=PhenTr(:,1)
 
 	open(unit=6,form="formatted",CARRIAGECONTROL="FORTRAN")
 	do h=1,nRound
@@ -46,8 +48,8 @@ subroutine RidgeRegression
 		do j=1,nSnp
 			snpid=RandomOrdering(j)
 			E(:,1)=E(:,1)+(GenosTr(:,snpid)*G(snpid,1))
-			Lhs=XpX(snpid,1)+Lambda(snpid)
-			Rhs=sdot(nAnisTr,GenosTr(:,snpid),One,E(:,1),One)
+			Lhs=XpX(snpid,1)+LambdaSnp
+			Rhs=sdot(nAnisTr,GenosTr(:,snpid),1,E(:,1),1)
 			SolOld=G(snpid,1)
 			G(snpid,1)=Rhs/Lhs
 			E(:,1)=E(:,1)-(GenosTr(:,snpid)*G(snpid,1))
@@ -55,8 +57,8 @@ subroutine RidgeRegression
 		enddo
 
 		if (mod(h,200)==0) then
-			call sgemm("n","n",nAnisTr,One,nSnp,myone,GenosTr,nAnisTr,G,nSnp,myzero,Xg,nAnisTr)
-			E(:,1)=Phen(:,1)-Xg(:,1)-Mu
+			call sgemm("n","n",nAnisTr,1,nSnp,OneR,GenosTr,nAnisTr,G,nSnp,ZeroR,Xg,nAnisTr)
+			E(:,1)=PhenTr(:,1)-Xg(:,1)-Mu
 		endif
 
 		if (eps.lt.1e-8) then
@@ -65,6 +67,9 @@ subroutine RidgeRegression
 	enddo
 	close(6)
 
+	deallocate(XpX)
+	deallocate(Xg)
+	deallocate(E)
 end subroutine RidgeRegression
 
-!###########################################################################################################################################################
+!###############################################################################

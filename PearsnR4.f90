@@ -1,10 +1,17 @@
-!#############################################################################################################################################################################################################################
+!###############################################################################
 
-subroutine PearsnR4(x,y,n,r)
+subroutine PearsnR4(x,y,n,r,sxx,syy,sxy)
 	implicit none
-	integer :: n,j
-	real(4) :: prob,r,z,x(n),y(n),TINY
-	real(4) :: ax,ay,df,sxx,sxy,syy,t,xt,betai,yt
+	! Arguments
+	integer,intent(in) :: n
+	real(4),intent(in) :: x(n),y(n)
+	real(4),intent(out) :: r
+	real(4),intent(out),optional :: sxx
+	real(4),intent(out),optional :: syy
+	real(4),intent(out),optional :: sxy
+	! Other
+    integer :: j
+	real(4) :: prob,z,TINY,ax,ay,df,t,xt,betai,yt
 
 	tiny=1.0e-20
 	ax=0.0
@@ -35,4 +42,4 @@ subroutine PearsnR4(x,y,n,r)
 	return
 end subroutine PearsnR4
 
-!###########################################################################################################################################################
+!###############################################################################

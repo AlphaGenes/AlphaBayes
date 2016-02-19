@@ -1,74 +1,98 @@
-comp := ifort
-#opt := -fast # does additional stuff beyond -O3, but needs testing!!!
-opt := -O3
+# General variables
+NAME:=AlphaBayes
+VERSION:= $(shell git rev-parse --short HEAD)
+SUBVERSION:=0
+PROGRAM:=$(NAME)$(VERSION).$(SUBVERSION)
+
+# Set the default compiler to iFort
+FC:=ifort
+FFLAGS:=-O3 -DVERS=""commit-$(VERSION)""
+
+#  If -D WEB is specified, stops will be put into AlphaBayes.
 
 # MS Windows
-ifeq (${OS}, Windows_NT)
-  opt := ${opt} -static -Qopenmp-link:static -Qmkl -Qlocation,link,"${VCINSTALLDIR}/bin"
-  obj := .obj
-  exe := .exe
+ifeq ($(OS), Windows_NT)
+	SRCDIR      := src/
+	BUILDDIR    :=
+	TARGETDIR   :=
+	OSFLAG := "OS_WIN"
+	FFLAGS := $(FFLAGS) /static /i8 /fpp /Qmkl /Qopenmp-link:static /Qlocation,link,"${VCINSTALLDIR}/bin" /D $(OSFLAG)
+	ABOPT := -static  -Qmkl
+	obj := .obj
+
+	MAKEDIR :=
+	exe := .exe
+	CC := cl
+	CFLAGS := /EHsc
+
+	DEL := del
 else
-# Linux or Mac OSX
-  obj := .o
-  exe :=
-  opt := ${opt} -mkl -static-intel -openmp-link=static
-  uname := ${shell uname}
-  # Linux only
-  ifeq ($(uname), Linux)
-    opt := ${opt} -static -static-libgcc -static-libstdc++
-  endif
+	# Linux or Mac OSX
+	SRCDIR      := src/
+	BUILDDIR    := objs/
+	TARGETDIR   := bin/
+	obj := .o
+	OSFLAG := "OS_UNIX"
+	ABOPT := -mkl -static-intel -openmp-link=static
+	exe :=
+	FFLAGS:= $(FFLAGS) -mkl -i8 -static-intel -fpp -openmp-link=static  -module $(BUILDDIR) -D $(OSFLAG)
+	uname := $(shell uname)
+	MAKEDIR := @mkdir -p
+	DEL := rm -rf
+  	# Linux only
+	ifeq ($(uname), Linux)
+		FFLAGS := $(FFLAGS) -static -static-libgcc -static-libstdc++
+	endif
 endif
 
-AlphaBayes: Makefile AlphaBayes.f90 Global${obj} ReadParam${obj} ReadData${obj} InitiateSeed${obj} PearsnR4${obj} \
-	RidgeRegression${obj} RidgeRegressionMCMC${obj} BayesA${obj} MarkerEffectPostProcessing${obj} gasdev${obj} random_gamma${obj} momentR4${obj} ran1${obj} random_order${obj}
-	$(comp) $(opt) AlphaBayes.f90 Global${obj} ReadParam${obj} ReadData${obj} InitiateSeed${obj} PearsnR4${obj} \
-		RidgeRegression${obj} RidgeRegressionMCMC${obj} BayesA${obj} MarkerEffectPostProcessing${obj} gasdev${obj} random_gamma${obj} momentR4${obj} ran1${obj} random_order${obj} \
-		-o AlphaBayes
+# Compile everything
+all: directories $(TARGETDIR)$(NAME)$(exe) $(TARGETDIR)AlphaBayes$(exe)
 
-Global${obj}: Makefile Global.f90
-	$(comp) -c $(opt) -o Global${obj} Global.f90
+directories:
+	$(MAKEDIR) $(TARGETDIR)
+	$(MAKEDIR) $(BUILDDIR)
 
-ReadParam${obj}: Makefile ReadParam.f90
-	$(comp) -c $(opt) -o ReadParam${obj} ReadParam.f90
+# Compilation options for debugging
+# With warnings about not used variables
+debuglong: FFLAGS := $(FFLAGS) -i8 -traceback -g -debug all -fpp -ftrapuv -fpe0 -warn -check all
 
-ReadData${obj}: Makefile ReadData.f90
-	$(comp) -c $(opt) -o ReadData${obj} ReadData.f90
+debuglong: all
 
-InitiateSeed${obj}: Makefile InitiateSeed.f90
-	$(comp) -c $(opt) -o InitiateSeed${obj} InitiateSeed.f90
+# With memory checks
+debug: FFLAGS := $(FFLAGS) -i8 -traceback -g -debug all -warn -check bounds -check format \
+		-check output_conversion -check pointers -check uninit -fpp
 
-PearsnR4${obj}: Makefile PearsnR4.f90
-	$(comp) -c $(opt) -o PearsnR4${obj} PearsnR4.f90
+debug: all
 
-RidgeRegression${obj}: Makefile RidgeRegression.f90
-	$(comp) -c $(opt) -o RidgeRegression${obj} RidgeRegression.f90
+web: FFLAGS := $(FFLAGS) -D "WEB"
 
-RidgeRegressionMCMC${obj}: Makefile RidgeRegressionMCMC.f90
-	$(comp) -c $(opt) -o RidgeRegressionMCMC${obj} RidgeRegressionMCMC.f90
+web: all
 
-BayesA${obj}: Makefile BayesA.f90
-	$(comp) -c $(opt) -o BayesA${obj} BayesA.f90
+OBJS : = Global$(obj) ReadParam$(obj) ReadData$(obj) InitiateSeed$(obj) PearsnR4$(obj) \
+	RidgeRegression$(obj) RidgeRegressionMCMC$(obj) BayesA$(obj) MarkerEffectPostProcessing$(obj) \
+	Prediction$(obj) gasdev$(obj) random_gamma$(obj) momentR4$(obj) ran1$(obj) random_order$(obj)
 
-MarkerEffectPostProcessing${obj}: Makefile MarkerEffectPostProcessing.f90
-	$(comp) -c $(opt) -o MarkerEffectPostProcessing${obj} MarkerEffectPostProcessing.f90
+# If binary is made, intermediate files will be binary
+binary: FFLAGS := $(FFLAGS) -D "BINARY"
 
-gasdev${obj}: Makefile gasdev.f90
-	$(comp) -c $(opt) -o gasdev${obj} gasdev.f90
+binary: all
+# Compile AlphaBayes
+$(TARGETDIR)AlphaBayes$(exe): Makefile $(SRCDIR)*.f90
+	@echo "Compiling AlphaBayes..."
+	$(FC) $(SRCDIR)AlphaBayes.f90 $(OBJS) $(FFLAGS) -o $(TARGETDIR)AlphaBayes$(exe)
+	@echo
 
-random_gamma${obj}: Makefile random_gamma.f90
-	$(comp) -c $(opt) -o random_gamma${obj} random_gamma.f90
+%.o: Makefile %.f90
+	${FC} ${FFLAGS} -c $<
 
-momentR4${obj}: Makefile momentR4.f90
-	$(comp) -c $(opt) -o momentR4${obj} momentR4.f90
+# Cleaning
+sparklinglyclean: veryclean
+	rm -rf TARGETDIR
 
-ran1${obj}: Makefile ran1.f90
-	$(comp) -c $(opt) -o ran1${obj} ran1.f90
-
-random_order${obj}: Makefile random_order.f90
-	$(comp) -c $(opt) -o random_order${obj} random_order.f90
+veryclean: clean
+	$(DEL) $(TARGETDIR)AlphaBayes$(exe)
 
 clean:
-	rm -f *${obj} *.mod
+	$(DEL) -rf $(BUILDDIR) *$(obj) *.mod *.dwarf *.i90 *__genmod* *~
 
-cleanall: clean
-	rm -f AlphaBayes${exe}
+.PHONY: make veryclean all

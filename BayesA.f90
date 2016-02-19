@@ -1,23 +1,23 @@
-!###########################################################################################################################################################
+!###############################################################################
 
 subroutine BayesA
 	use Global
 	implicit none
 
-	real(4) :: sdot,InvLhs,Rhs,Lhs,SolOld,myone,myzero,LambdaSnp,EpE,nSampR,nAnisTrR
-	real(4),allocatable,dimension(:,:) :: GAccum,Gvar
+	integer :: i,h,j,snpid,RandomOrdering(nSnp)
+
+	real(4) :: sdot,InvLhs,Rhs,Lhs,SolOld,OneR,ZeroR,LambdaSnp,EpE,nSampR,nAnisTrR
+	real(4),allocatable :: GAccum(:,:),GVar(:,:),XpX(:,:),Xg(:,:),E(:,:)
 	real(8) :: random_gamma,gasdev,vdf,ShapeCoefficient,ScaleCoefficient,sc,gampe1,gampe2
-	integer :: i,h,j,snpid,RandomOrdering(nSnp),One
 
 	allocate(XpX(nSnp,1))
 	allocate(Xg(nAnisTr,1))
-	allocate(Lambda(nSnp))
-	allocate(Gvar(nSnp,1))
+	allocate(GVar(nSnp,1))
 	allocate(GAccum(nSnp,1))
+	allocate(E(nAnisTr,1))
 
-	myone=1.0
-	myzero=0.0
-	One=1
+	OneR=1.0
+	ZeroR=0.0
 	Mu=0.0
 	G=0.1
 	GAccum=0
@@ -27,16 +27,16 @@ subroutine BayesA
 	ShapeCoefficient=(vdf/2.0) !Ben
 	ScaleCoefficient=((vdf-2.0)*VarA)/Sum2pq
 	sc=2.0
-	gampe1=float((nAnisTr)/2.0)-2.0
+	gampe1=(float(nAnisTr)/2.0)-2.0
 	gampe2=2.0
 
 	! Construct XpX
 	do j=1,nSnp
-		XpX(j,1)=sdot(nAnisTr,GenosTr(:,j),One,GenosTr(:,j),One) + 0.000000000000001
+		XpX(j,1)=sdot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + 0.000000000000001
 	enddo
 
 	! Working phenotypes
-	E(:,1)=Phen(:,1)
+	E(:,1)=PhenTr(:,1)
 
 	open(unit=6,form='formatted',CARRIAGECONTROL='FORTRAN')
 	nSampR=float(nRound-nBurn)
@@ -68,7 +68,7 @@ subroutine BayesA
 			E(:,1)=E(:,1)+(GenosTr(:,snpid)*G(snpid,1))
 			LambdaSnp=VarE/gvar(snpid,1)
 			Lhs=XpX(snpid,1)+LambdaSnp
-			Rhs=sdot(nAnisTr,GenosTr(:,snpid),One,E(:,1),One)
+			Rhs=sdot(nAnisTr,GenosTr(:,snpid),1,E(:,1),1)
 			G(snpid,1)=(Rhs/Lhs)+(gasdev(idum)*sqrt(1.0/Lhs))
 			E(:,1)=E(:,1)-(GenosTr(:,snpid)*G(snpid,1))
 		enddo
@@ -78,13 +78,19 @@ subroutine BayesA
 
 		! Recompute residuals to avoid rounding errors
 		if (mod(h,200)==0) then
-			call sgemm('n','n',nAnisTr,One,nSnp,myone,GenosTr,nAnisTr,G,nSnp,myzero,Xg,nAnisTr)
-			E(:,1)=Phen(:,1)-Xg(:,1)-Mu
+			call sgemm('n','n',nAnisTr,1,nSnp,OneR,GenosTr,nAnisTr,G,nSnp,ZeroR,Xg,nAnisTr)
+			E(:,1)=PhenTr(:,1)-Xg(:,1)-Mu
 		endif
 
 	enddo
 
 	G=GAccum
+
+	deallocate(XpX)
+	deallocate(Xg)
+	deallocate(GVar)
+	deallocate(GAccum)
+	deallocate(E)
 end subroutine BayesA
 
-!###########################################################################################################################################################
+!###############################################################################

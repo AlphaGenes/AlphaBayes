@@ -1,17 +1,16 @@
 GenotypeTraining   ,GenoTrain.csv
-GenotypeTesting    ,GenoTest.csv
 PhenotypeTraining  ,PhenoTrain.csv
-TbvTesting         ,PhenoTest.csv
+nTestPopulations   ,2
+GenotypeTesting    ,GenoTest1.csv,GenoTest2.csv
+PhenotypeTesting   ,PhenoTest1.csv,PhenoTest2.csv
 FixedSnpFile       ,None
 nSnp               ,2920
 nAnisTr            ,215
-nAnisTe            ,100
-nRound             ,100
-nBurn              ,10
-VareA              ,0.5
+nAnisTe            ,100,100
+nRound             ,1000
+nBurn              ,100
+VarA               ,0.5
 VarE               ,0.5
-NumberOfProcessors ,3
+NumberOfProcessors ,4
 ScalingOption      ,4
-MissingGenoCode    ,9
-MarkerSolver       ,Ridge
-
+MarkerSolver       ,BayesA

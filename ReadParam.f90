@@ -1,19 +1,25 @@
-!##################################################################################################################################
+!###############################################################################
 
 subroutine ReadParam
 	use Global
 	implicit none
-	!include 'omp_lib.h' ! for omp_get_time
+
+	integer :: i,UnitSpec,UnitFixedSnp
 
 	character(len=100) :: DumC
-	integer :: i,UnitSpec,UnitFixedSnp
 
 	open(newunit=UnitSpec,file="AlphaBayesSpec.txt",status="old")
 
 	read(UnitSpec,*) DumC,GenoTrFile
-	read(UnitSpec,*) DumC,GenoTeFile
 	read(UnitSpec,*) DumC,PhenoTrFile
-	read(UnitSpec,*) DumC,PhenoTeFile
+
+	read(UnitSpec,*) DumC,nTePop
+	allocate(PhenoTeFile(nTePop))
+	allocate(GenoTeFile(nTePop))
+	allocate(nAnisTe(nTePop))
+	read(UnitSpec,*) DumC,GenoTeFile(:)
+	read(UnitSpec,*) DumC,PhenoTeFile(:)
+
 	read(UnitSpec,*) DumC,FileFixedSnp
 	read(UnitSpec,*) DumC,nSnpExternal
 
@@ -29,18 +35,24 @@ subroutine ReadParam
 		allocate(FixedSnp(nSnpExternal))
 		FixedSnp=1
 	endif
+	close(UnitFixedSnp)
 
 	read(UnitSpec,*) DumC,nAnisTr
-	read(UnitSpec,*) DumC,nAnisTe
+	read(UnitSpec,*) DumC,nAnisTe(:)
+
 	read(UnitSpec,*) DumC,nRound
 	read(UnitSpec,*) DumC,nBurn
+
 	read(UnitSpec,*) DumC,VarA
 	read(UnitSpec,*) DumC,VarE
-	read(UnitSpec,*) DumC,nProcessors
-	read(UnitSpec,*) DumC,ScalingOpt
-	read(UnitSpec,*) DumC,MarkerSolver
 
+	read(UnitSpec,*) DumC,nProcessors
 	call OMP_SET_NUM_THREADS(nProcessors)
+
+	read(UnitSpec,*) DumC,ScalingOpt
+
+	read(UnitSpec,*) DumC,MarkerSolver
+	close(UnitSpec)
 end subroutine ReadParam
 
-!##################################################################################################################################
+!###############################################################################

@@ -1,15 +1,17 @@
-!##################################################################################################################################
+!###############################################################################
 
 module Global
 	implicit none
 
-	integer :: idum,nSnp,nSnpExternal,nAnisTr,nAnisTe,nRound,nBurn,nProcessors,ScalingOpt
-	real(4) :: VarY,VarA,VarE,Mu,Sum2pq
-	real(4),allocatable,dimension(:) :: SnpTmp,Lambda,SnpOut,AlleleFreq,GenoTeId
-	real(4),allocatable,dimension(:,:) :: GenosTr,GenosTe,Phen,E,G,Ebv,Tbv,XpX,Xg
-	integer,allocatable,dimension(:) :: FixedSnp,SnpPosition
+	integer :: idum,nSnp,nSnpExternal,nAnisTr,nRound,nBurn,nProcessors,ScalingOpt,nTePop
+	integer,allocatable :: nAnisTe(:),FixedSnp(:),SnpPosition(:)
 
-	character(len=1000) :: GenoTrFile,GenoTeFile,PhenoTrFile,PhenoTeFile,FileFixedSnp,MarkerSolver
+	real(4) :: VarY,VarA,VarE,Mu,Sum2pq
+	real(4) :: ExpVarX,SumExpVarX,ObsVarX,SumObsVarX
+	real(4),allocatable :: SnpTmp(:),AlleleFreq(:),GenosTr(:,:),PhenTr(:,:),G(:,:)
+
+	character(len=1000) :: GenoTrFile,PhenoTrFile,FileFixedSnp,MarkerSolver
+	character(len=1000),allocatable :: GenoTeFile(:),PhenoTeFile(:)
 end module Global
 
-!##################################################################################################################################
+!###############################################################################

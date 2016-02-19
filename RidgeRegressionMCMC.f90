@@ -1,24 +1,25 @@
-!###########################################################################################################################################################
+!###############################################################################
 
 subroutine RidgeRegressionMCMC
 	use Global
 	implicit none
 
-	real(4) :: sdot,InvLhs,Rhs,Lhs,SolOld,myone,myzero,nAnisTrR,LambdaSnp,EpE,VarG,GpG
+	integer :: i,h,j,snpid,RandomOrdering(nSnp)
+
+	real(4) :: sdot,InvLhs,Rhs,Lhs,SolOld,OneR,ZeroR,nAnisTrR,LambdaSnp,EpE,VarG,GpG
 	real(4) :: VarEAccum,VarGAccum,nSampR
-	real(4),allocatable :: GAccum(:,:),SX2(:),MX2(:)
+	real(4),allocatable :: GAccum(:,:),SX2(:),MX2(:),XpX(:,:),Xg(:,:),E(:,:)
 	real(8) :: random_gamma,gasdev,R2,EDF0,EDF2,GDF0,GDF2,ES0,GS0,MSX
-	integer :: i,h,j,snpid,RandomOrdering(nSnp),One
 
 	allocate(XpX(nSnp,1))
 	allocate(Xg(nAnisTr,1))
 	allocate(GAccum(nSnp,1))
 	allocate(SX2(nSnp))
 	allocate(MX2(nSnp))
+	allocate(E(nAnisTr,1))
 
-	myone=1.0
-	myzero=0.0
-	One=1
+	OneR=1.0
+	ZeroR=0.0
 	Mu=0.0
 	G=0.1
 	GAccum=0.0
@@ -44,11 +45,11 @@ subroutine RidgeRegressionMCMC
 
 	! Construct XpX
 	do j=1,nSnp
-		XpX(j,1)=sdot(nAnisTr,GenosTr(:,j),One,GenosTr(:,j),One) + 0.000000000000001
+		XpX(j,1)=sdot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + 0.000000000000001
 	enddo
 
 	! Working phenotypes
-	E(:,1)=Phen(:,1)
+	E(:,1)=PhenTr(:,1)
 
 	open(unit=6,form="formatted",CARRIAGECONTROL="FORTRAN")
 	nSampR=float(nRound-nBurn)
@@ -81,29 +82,35 @@ subroutine RidgeRegressionMCMC
 			snpid=RandomOrdering(j)
 			E(:,1)=E(:,1)+(GenosTr(:,snpid)*G(snpid,1))
 			Lhs=XpX(snpid,1)+LambdaSnp
-			Rhs=sdot(nAnisTr,GenosTr(:,snpid),One,E(:,1),One)
+			Rhs=sdot(nAnisTr,GenosTr(:,snpid),1,E(:,1),1)
 			G(snpid,1)=(Rhs/Lhs)+(gasdev(idum)*sqrt(1.0/Lhs))
 			E(:,1)=E(:,1)-(GenosTr(:,snpid)*G(snpid,1))
 		enddo
 		if (h>nBurn) then
 			GAccum=GAccum+G/nSampR
-			VarGAccum=VarGAccum+VarE/nSampR
-			VarEAccum=VarEAccum+VarG/nSampR
+			!VarGAccum=VarGAccum+VarE/nSampR
+			!VarEAccum=VarEAccum+VarG/nSampR
 		endif
 
 		! Recompute residuals to avoid rounding errors
 		if (mod(h,200)==0) then
-			call sgemm("n","n",nAnisTr,One,nSnp,myone,GenosTr,nAnisTr,G,nSnp,myzero,Xg,nAnisTr)
-			E(:,1)=Phen(:,1)-Xg(:,1)-Mu
+			call sgemm("n","n",nAnisTr,1,nSnp,OneR,GenosTr,nAnisTr,G,nSnp,ZeroR,Xg,nAnisTr)
+			E(:,1)=PhenTr(:,1)-Xg(:,1)-Mu
 		endif
 
 	enddo
 	close(6)
 
 	G=GAccum
-	VarG=VarGAccum
-	VarE=VarEAccum
+	!VarG=VarGAccum
+	!VarE=VarEAccum
 
+	deallocate(XpX)
+	deallocate(Xg)
+	deallocate(GAccum)
+	deallocate(SX2)
+	deallocate(MX2)
+	deallocate(E)
 end subroutine RidgeRegressionMCMC
 
-!###########################################################################################################################################################
+!###############################################################################
