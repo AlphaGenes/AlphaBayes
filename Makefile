@@ -16,6 +16,7 @@ ifeq ($(OS), Windows_NT)
 	BUILDDIR    :=
 	TARGETDIR   :=
 	OSFLAG := "OS_WIN"
+	## see also https://software.intel.com/en-us/compiler_winapp_f (2014-12-03)
 	FFLAGS := $(FFLAGS) /static /i8 /fpp /Qmkl /Qopenmp-link:static /Qlocation,link,"${VCINSTALLDIR}/bin" /D $(OSFLAG)
 	ABOPT := -static  -Qmkl
 	obj := .obj
