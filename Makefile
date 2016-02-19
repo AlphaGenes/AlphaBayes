@@ -77,13 +77,10 @@ binary: FFLAGS := $(FFLAGS) -D "BINARY"
 
 binary: all
 # Compile AlphaBayes
-$(TARGETDIR)AlphaBayes$(exe): Makefile $(SRCDIR)*.f90
+$(TARGETDIR)AlphaBayes$(exe): Makefile $(SRCDIR)AlphaBayes.f90
 	@echo "Compiling AlphaBayes..."
 	$(FC) $(SRCDIR)AlphaBayes.f90 $(OBJS) $(FFLAGS) -o $(TARGETDIR)AlphaBayes$(exe)
 	@echo
-
-%.o: Makefile %.f90
-	${FC} ${FFLAGS} -c $<
 
 # Cleaning
 sparklinglyclean: veryclean

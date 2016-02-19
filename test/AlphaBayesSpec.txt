@@ -6,11 +6,11 @@ PhenotypeTesting   ,PhenoTest1.csv,PhenoTest2.csv
 FixedSnpFile       ,None
 nSnp               ,2920
 nAnisTr            ,215
-nAnisTe            ,100,100
-nRound             ,1000
-nBurn              ,100
+nAnisTe            ,50,100
+nRound             ,10000
+nBurn              ,1000
 VarA               ,0.5
 VarE               ,0.5
 NumberOfProcessors ,4
 ScalingOption      ,4
-MarkerSolver       ,BayesA
+MarkerSolver       ,RidgeMCMC
