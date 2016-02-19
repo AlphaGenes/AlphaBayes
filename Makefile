@@ -31,9 +31,12 @@ else
 	TARGETDIR   := bin/
 	obj := .o
 	OSFLAG := "OS_UNIX"
-	MKLROOT := /opt/intel/mkl
-	# On Eddie
+        # On Mac
+	# MKLROOT := /opt/intel/mkl
+	# On Eddie2
 	# MKLROOT:=/exports/applications/apps/intel/ClusterStudio2013/mkl
+	# On Eddie3
+	MKLROOT := /exports/applications/apps/SL7/intel/parallel_studio_xe_2016/mkl
 	MKLLIB := -L$(MKLROOT)/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -openmp -lpthread -lm
 	MKLINC := -I$(MKLROOT)/include
 	exe :=
@@ -70,10 +73,6 @@ web: FFLAGS := $(FFLAGS) -D "WEB"
 
 web: all
 
-OBJS : = Global$(obj) ReadParam$(obj) ReadData$(obj) InitiateSeed$(obj) PearsnR4$(obj) \
-	RidgeRegression$(obj) RidgeRegressionMCMC$(obj) BayesA$(obj) MarkerEffectPostProcessing$(obj) \
-	Prediction$(obj) gasdev$(obj) random_gamma$(obj) momentR4$(obj) ran1$(obj) random_order$(obj)
-
 # If binary is made, intermediate files will be binary
 binary: FFLAGS := $(FFLAGS) -D "BINARY"
 
@@ -81,7 +80,7 @@ binary: all
 # Compile AlphaBayes
 $(TARGETDIR)AlphaBayes$(exe): Makefile $(SRCDIR)AlphaBayes.f90
 	@echo "Compiling AlphaBayes..."
-	$(FC) $(SRCDIR)AlphaBayes.f90 $(OBJS) $(FFLAGS) -o $(TARGETDIR)AlphaBayes$(exe)
+	$(FC) $(SRCDIR)AlphaBayes.f90 $(FFLAGS) -o $(TARGETDIR)AlphaBayes$(exe)
 	@echo
 
 # Cleaning
