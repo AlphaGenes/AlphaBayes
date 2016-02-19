@@ -17,15 +17,12 @@ ifeq ($(OS), Windows_NT)
 	TARGETDIR   :=
 	OSFLAG := "OS_WIN"
 	## see also https://software.intel.com/en-us/compiler_winapp_f (2014-12-03)
-	FFLAGS := $(FFLAGS) /static /i8 /fpp /Qmkl /Qopenmp-link:static /Qlocation,link,"${VCINSTALLDIR}/bin" /D $(OSFLAG)
-	ABOPT := -static  -Qmkl
+	FFLAGS := $(FFLAGS) /static /fpp /Qmkl /Qopenmp-link:static /Qlocation,link,"${VCINSTALLDIR}/bin" /D $(OSFLAG)
 	obj := .obj
-
 	MAKEDIR :=
 	exe := .exe
 	CC := cl
 	CFLAGS := /EHsc
-
 	DEL := del
 else
 	# Linux or Mac OSX
@@ -34,9 +31,13 @@ else
 	TARGETDIR   := bin/
 	obj := .o
 	OSFLAG := "OS_UNIX"
-	ABOPT := -mkl -static-intel -openmp-link=static
+	MKLROOT := /opt/intel/mkl
+	# On Eddie
+	# MKLROOT:=/exports/applications/apps/intel/ClusterStudio2013/mkl
+	MKLLIB := -L$(MKLROOT)/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -openmp -lpthread -lm
+	MKLINC := -I$(MKLROOT)/include
 	exe :=
-	FFLAGS:= $(FFLAGS) -mkl -i8 -static-intel -fpp -openmp-link=static  -module $(BUILDDIR) -D $(OSFLAG)
+	FFLAGS:= $(FFLAGS) -mkl -static-intel -fpp -openmp-link=static  -module $(BUILDDIR) -D $(OSFLAG)
 	uname := $(shell uname)
 	MAKEDIR := @mkdir -p
 	DEL := rm -rf
