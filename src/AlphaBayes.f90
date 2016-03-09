@@ -1,1010 +1,905 @@
+#ifdef BINARY
+#define BINFILE ,form="unformatted"
+#else
+#define BINFILE
+#endif
+
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 
+#ifdef OS_UNIX
+#define DASH "/"
+#define COPY "cp"
+#define MKDIR "mkdir -p"
+#define RMDIR "rm -r"
+#define RM "rm"
+#define RENAME "mv"
+#else
+#define DASH "\"
+#define COPY "copy"
+#define MKDIR "md"
+#define RMDIR "rmdir /S"
+#define RM "del"
+#define RENAME "move /Y"
+#endif
+
+! TODO: push AlphaStatModule to some other file
+
 !###############################################################################
 
-module Global
-    implicit none
+module AlphaStatModule
 
-    integer :: idum,nSnp,nSnpExternal,nAnisTr,nRound,nBurn,nProcessors,ScalingOpt,nTePop
-    integer,allocatable :: nAnisTe(:),FixedSnp(:),SnpPosition(:)
+  use ISO_Fortran_Env, STDIN=>input_unit,STDOUT=>output_unit,STDERR=>error_unit
 
-    real(4) :: VarY,VarA,VarE,Mu,Sum2pq
-    real(4) :: ExpVarX,SumExpVarX,ObsVarX,SumObsVarX
-    real(4),allocatable :: SnpTmp(:),AlleleFreq(:),GenosTr(:,:),PhenTr(:,:),G(:,:)
+  implicit none
 
-    character(len=1000) :: GenoTrFile,PhenoTrFile,FileFixedSnp,MarkerSolver
-    character(len=1000),allocatable :: GenoTeFile(:),PhenoTeFile(:)
+  private
+  public :: CalcMoments,MomentsS,MomentsD
+  public :: CalcCorrelation,CorrelationS,CorrelationD
 
-    contains
+  type :: MomentsS
+    integer(int32) :: n
+    real(real32)   :: Mean
+    real(real32)   :: Var
+    real(real32)   :: SD
+    real(real32)   :: Skew ! TODO: do we ever need skewness?
+    real(real32)   :: Curt ! TODO: do we ever need curtosis?
+  end type
 
-        subroutine PearsnR4(x,y,n,r,sxx,syy,sxy)
-            implicit none
-            ! Arguments
-            integer,intent(in) :: n
-            real(4),intent(in) :: x(n),y(n)
-            real(4),intent(out) :: r
-            real(4),intent(out) :: sxx
-            real(4),intent(out) :: syy
-            real(4),intent(out) :: sxy
-            ! Other
-            integer :: j
-            real(4) :: TINY,ax,ay,xt,yt!,betai,prob,z,df,t
+  type :: MomentsD
+    integer(int32) :: n
+    real(real64)   :: Mean
+    real(real64)   :: Var
+    real(real64)   :: SD
+    real(real64)   :: Skew
+    real(real64)   :: Curt
+  end type
 
-            tiny=1.0e-20
-            ax=0.0
-            ay=0.0
-            DO j=1,n
-                ax=ax+x(j)
-                ay=ay+y(j)
-            END DO
-            ax=ax/float(n)
-            ay=ay/float(n)
-            sxx=0.
-            syy=0.
-            sxy=0.
-            DO j=1,n
-                xt=x(j)-ax
-                yt=y(j)-ay
-                sxx=sxx+xt*xt
-                syy=syy+yt*yt
-                sxy=sxy+xt*yt
-            END DO
-            r=sxy/(SQRT(sxx*syy)+TINY)
-            !z=0.5*LOG(((1.+r)+TINY)/((1.-r)+TINY))
-            !df=n-2
-            !t=r*SQRT(df/(((1.-r)+TINY)*((1.+r)+TINY)))
-            !prob=betai(0.5*df,0.5,df/(df+t**2))
-            !prob=erfcc(ABS(z*SQRT(n-1.))/1.4142136)
-            !prob=0
-            return
-        end subroutine PearsnR4
+  interface CalcMoments
+    module procedure CalcMomentsS, CalcMomentsD
+  end interface
+
+  type :: CorrelationS
+    real(real32)   :: Cor
+    real(real32)   :: Cov
+    real(real32)   :: Var1
+    real(real32)   :: Var2
+  end type
+
+  type :: CorrelationD
+    real(real64)   :: Cor
+    real(real64)   :: Cov
+    real(real64)   :: Var1
+    real(real64)   :: Var2
+  end type
+
+  interface CalcCorrelation
+    module procedure CalcCorrelationS, CalcCorrelationD
+  end interface
+
+  contains
 
     !###########################################################################
-end module Global
+
+    subroutine CalcCorrelationS(x,y,Out)
+      implicit none
+      ! Arguments
+      real(real32),intent(in)        :: x(:)
+      real(real32),intent(in)        :: y(:)
+      type(CorrelationS),intent(out) :: Out
+
+      ! Other
+      integer(int32) :: i,n
+      real(real32) :: nR,MeanX,MeanY,DevX,DevY,SumXX,SumXY,SumYY
+
+      n=size(x)
+      nR=real(n)
+      MeanX=sum(x(:))/nR
+      MeanY=sum(y(:))/nR
+      SumXX=0.0
+      SumXY=0.0
+      SumYY=0.0
+      do i=1,n
+        DevX=x(i)-MeanX
+        DevY=y(i)-MeanY
+        SumXX=SumXX+DevX*DevX
+        SumXY=SumXY+DevX*DevY
+        SumYY=SumYY+DevY*DevY
+      end do
+      Out%Cor=SumXY/(sqrt(SumXX*SumYY)+tiny(x))
+      Out%Cov=SumXY/(nR-1.0)
+      Out%Var1=SumXX/(nR-1.0)
+      Out%Var2=SumYY/(nR-1.0)
+    end subroutine
+
+    !###########################################################################
+
+    subroutine CalcCorrelationD(x,y,Out)
+      implicit none
+      ! Arguments
+      real(real64),intent(in)        :: x(:)
+      real(real64),intent(in)        :: y(:)
+      type(CorrelationD),intent(out) :: Out
+
+      ! Other
+      integer(int32) :: i,n
+      real(real64) :: nR,MeanX,MeanY,DevX,DevY,SumXX,SumXY,SumYY
+
+      n=size(x)
+      nR=dble(n)
+      MeanX=sum(x(:))/nR
+      MeanY=sum(y(:))/nR
+      SumXX=0.0d0
+      SumXY=0.0d0
+      SumYY=0.0d0
+      do i=1,n
+        DevX=x(i)-MeanX
+        DevY=y(i)-MeanY
+        SumXX=SumXX+DevX*DevX
+        SumXY=SumXY+DevX*DevY
+        SumYY=SumYY+DevY*DevY
+      end do
+      Out%Cor=SumXY/(sqrt(SumXX*SumYY)+tiny(x))
+      Out%Cov=SumXY/(nR-1.0d0)
+      Out%Var1=SumXX/(nR-1.0d0)
+      Out%Var2=SumYY/(nR-1.0d0)
+    end subroutine
+
+    !###########################################################################
+
+    subroutine CalcMomentsS(x,Out)
+      implicit none
+
+      ! Arguments
+      real(real32),intent(in)   :: x(:)
+      type(MomentsS),intent(out) :: Out
+
+      ! Other
+      integer(int32) i,n
+      real(real32) :: nR,Dev,Mul
+
+      n=size(x)
+      if (n < 1) then
+        write(STDERR,"(a)") "ERROR: number of records must be at least 2 for CalcMoments"
+        write(STDERR,"(a)") " "
+        stop 1
+      end if
+
+      nR=real(n)
+      Out%Mean=sum(x(:))/nR
+      Out%Var=0.0
+      Out%Skew=0.0
+      Out%Curt=0.0
+
+      do i=1,n
+        Dev=x(i)-Out%Mean
+        Mul=Dev*Dev
+        Out%Var=Out%Var+Mul
+        Mul=Mul*Dev
+        Out%Skew=Out%Skew+Mul
+        Mul=Mul*Dev
+        Out%Curt=Out%Curt+Mul
+      end do
+
+      Out%Var=Out%Var/(nR-1.0)
+      Out%SD=sqrt(Out%Var)
+      if (Out%Var > 0.0) then
+        Out%Skew=Out%Skew/(nR*Out%SD**3)
+        Out%Curt=Out%Curt/(nR*Out%Var**2)-3.0
+      end if
+    end subroutine
+
+    !###########################################################################
+
+    subroutine CalcMomentsD(x,Out)
+      implicit none
+
+      ! Arguments
+      real(real64),intent(in)   :: x(:)
+      type(MomentsD),intent(out) :: Out
+
+      ! Other
+      integer(int32) i,n
+
+      real(real64) :: nR,Dev,Mul
+
+      n=size(x)
+      if (n < 1) then
+        write(STDERR,"(a)") "ERROR: number of records must be at least 2 for CalcMoments"
+        write(STDERR,"(a)") " "
+        stop 1
+      end if
+
+      nR=dble(n)
+      Out%Mean=sum(x(:))/nR
+      Out%Var=0.0d0
+      Out%Skew=0.0d0
+      Out%Curt=0.0d0
+
+      do i=1,n
+        Dev=x(i)-Out%Mean
+        Mul=Dev*Dev
+        Out%Var=Out%Var+Mul
+        Mul=Mul*Dev
+        Out%Skew=Out%Skew+Mul
+        Mul=Mul*Dev
+        Out%Curt=Out%Curt+Mul
+      end do
+
+      Out%Var=Out%Var/(nR-1.0d0)
+      Out%SD=sqrt(Out%Var)
+      if (Out%Var > 0.0d0) then
+        Out%Skew=Out%Skew/(nR*Out%SD**3)
+        Out%Curt=Out%Curt/(nR*Out%Var**2)-3.0d0
+      end if
+    end subroutine
+
+    !###########################################################################
+end module
 
 !###############################################################################
 
-subroutine ReadParam
-    use Global
-    implicit none
+module AlphaBayesModule
 
-    integer :: i,UnitSpec,UnitFixedSnp
+  use ISO_Fortran_Env, STDIN=>input_unit,STDOUT=>output_unit,STDERR=>error_unit
+  use IntelRNGMod
+  use AlphaSuiteModule, only : RandomOrder,Int2Char
+  use AlphaStatModule, only : CalcMoments,MomentsD,CalcCorrelation,CorrelationD
 
-    character(len=100) :: DumC
+  implicit none
 
-    open(newunit=UnitSpec,file="AlphaBayesSpec.txt",status="old")
+  integer(int32) :: nSnp,nSnpExternal,nAnisTr,nIter,nBurn,nProcessors,ScalingOpt,nTePop
+  integer(int32),allocatable :: nAnisTe(:),FixedSnp(:),SnpPosition(:)
 
-    read(UnitSpec,*) DumC,GenoTrFile
-    read(UnitSpec,*) DumC,PhenoTrFile
+  real(real64) :: MeanY,VarY,VarG,VarE,Mu,nAnisTrR,ExpVarX,SumExpVarX,ObsVarX,SumObsVarX
+  real(real64),allocatable :: SnpTmp(:),AlleleFreq(:),ScaleCoef(:),GenosTr(:,:),PhenoTr(:,:),G(:,:)
 
-    read(UnitSpec,*) DumC,nTePop
-    allocate(PhenoTeFile(nTePop))
-    allocate(GenoTeFile(nTePop))
-    allocate(nAnisTe(nTePop))
-    read(UnitSpec,*) DumC,GenoTeFile(:)
-    read(UnitSpec,*) DumC,PhenoTeFile(:)
+  character(len=1000) :: GenoTrFile,PhenoTrFile,FileFixedSnp,Method
+  character(len=1000),allocatable :: GenoTeFile(:),PhenoTeFile(:)
+  character(len=20),allocatable :: IdTr(:)
 
-    read(UnitSpec,*) DumC,FileFixedSnp
-    read(UnitSpec,*) DumC,nSnpExternal
+  REAL(REAL64),PARAMETER :: ONER=1.0d0,ZEROR=0.0d0
 
-    if (trim(FileFixedSnp)/="None") then
+  private
+  public :: ReadParam,ReadData,Method,Prediction
+  public :: RidgeRegression,RidgeRegressionMCMC!,BayesA
+
+  contains
+
+    !###########################################################################
+
+    subroutine ReadParam
+      implicit none
+
+      integer(int32) :: i,UnitSpec,UnitFixedSnp
+
+      character(len=100) :: DumC
+
+      open(newunit=UnitSpec,file="AlphaBayesSpec.txt",status="old")
+
+      read(UnitSpec,*) DumC,GenoTrFile
+      read(UnitSpec,*) DumC,PhenoTrFile
+
+      read(UnitSpec,*) DumC,nTePop
+      allocate(PhenoTeFile(nTePop))
+      allocate(GenoTeFile(nTePop))
+      allocate(nAnisTe(nTePop))
+      read(UnitSpec,*) DumC,GenoTeFile(:)
+      read(UnitSpec,*) DumC,PhenoTeFile(:)
+
+      read(UnitSpec,*) DumC,FileFixedSnp
+      read(UnitSpec,*) DumC,nSnpExternal
+
+      if (trim(FileFixedSnp)/="None") then
         open(newunit=UnitFixedSnp,file=trim(FileFixedSnp),status="old")
         allocate(FixedSnp(nSnpExternal))
         do i=1,nSnpExternal
-            read(UnitFixedSnp,*) FixedSnp(i)
-        enddo
+          read(UnitFixedSnp,*) FixedSnp(i)
+        end do
         nSnp=sum(FixedSnp(:))
         close(UnitFixedSnp)
-    else
+      else
         nSnp=nSnpExternal
         allocate(FixedSnp(nSnpExternal))
-        FixedSnp=1
-    endif
+        FixedSnp(:)=1
+      end if
 
-    read(UnitSpec,*) DumC,nAnisTr
-    read(UnitSpec,*) DumC,nAnisTe(:)
+      read(UnitSpec,*) DumC,nAnisTr
+      nAnisTrR=dble(nAnisTr)
+      read(UnitSpec,*) DumC,nAnisTe(:)
 
-    read(UnitSpec,*) DumC,nRound
-    read(UnitSpec,*) DumC,nBurn
+      read(UnitSpec,*) DumC,nIter
+      read(UnitSpec,*) DumC,nBurn
 
-    read(UnitSpec,*) DumC,VarA
-    read(UnitSpec,*) DumC,VarE
+      read(UnitSpec,*) DumC,VarG
+      read(UnitSpec,*) DumC,VarE
 
-    read(UnitSpec,*) DumC,nProcessors
-    call OMP_SET_NUM_THREADS(nProcessors)
+      read(UnitSpec,*) DumC,nProcessors
+      call OMP_SET_NUM_THREADS(nProcessors)
 
-    read(UnitSpec,*) DumC,ScalingOpt
+      read(UnitSpec,*) DumC,ScalingOpt
 
-    read(UnitSpec,*) DumC,MarkerSolver
-    close(UnitSpec)
-end subroutine ReadParam
+      read(UnitSpec,*) DumC,Method
+      close(UnitSpec)
+    end subroutine
 
-!###############################################################################
+    !###########################################################################
 
-subroutine ReadData
-    use Global
-    implicit none
+    subroutine ReadData
+      implicit none
 
-    integer :: i,j,nNotMissing,UnitGenoTr,UnitPhenoTr,UnitAlleleFreq
+      integer(int32) :: i,j,nNotMissing,UnitGenoTr,UnitPhenoTr,UnitAlleleFreq
 
-    real(4) :: ave,adev,sdev,var,skew,curt
+      character(len=100) :: DumC
 
-    character(len=100) :: DumC
+      type(MomentsD) :: TmpStat
 
-    open(newunit=UnitGenoTr,file=trim(GenoTrFile),status="old")
-    open(newunit=UnitPhenoTr,file=trim(PhenoTrFile),status="old")
-    open(newunit=UnitAlleleFreq,file="AlleleFreq.txt",status="unknown")
+      open(newunit=UnitGenoTr,file=trim(GenoTrFile),status="old")
+      open(newunit=UnitPhenoTr,file=trim(PhenoTrFile),status="old")
+      !open(newunit=UnitAlleleFreq,file="AlleleFreq.txt",status="unknown")
+      !write(UnitAlleleFreq,"(a11,1x,a11)") "Snp","AlleleFreq"
 
-    allocate(SnpTmp(nSnpExternal))
-    allocate(GenosTr(nAnisTr,nSnp))
-    allocate(PhenTr(nAnisTr,1))
-    allocate(G(nSnp,1))
-    allocate(AlleleFreq(nSnp))
-    allocate(SnpPosition(nSnp))
+      allocate(SnpTmp(nSnpExternal))
+      allocate(GenosTr(nAnisTr,nSnp))
+      allocate(PhenoTr(nAnisTr,1))
+      allocate(G(nSnp,1))
+      allocate(AlleleFreq(nSnp))
+      allocate(ScaleCoef(nSnp))
+      allocate(SnpPosition(nSnp))
+      allocate(IdTr(nAnisTr))
 
-    j=0
-    do i=1,nSnpExternal
+      j=0
+      do i=1,nSnpExternal
         if (FixedSnp(i)==1) then
-            j=j+1
-            SnpPosition(j)=i
-        endif
-    enddo
+          j=j+1
+          SnpPosition(j)=i
+        end if
+      end do
 
-    do i=1,nAnisTr
+      do i=1,nAnisTr
         read(UnitGenoTr,*) DumC,SnpTmp(:)
         GenosTr(i,:)=SnpTmp(SnpPosition(:))
-        read(UnitPhenoTr,*) DumC,PhenTr(i,1)
-    enddo
+        read(UnitPhenoTr,*) IdTr(i),PhenoTr(i,1)
+        if (trim(DumC) /= trim(IdTr(i))) then
+          write(STDERR,"(a)") "ERROR: Individual identifications in the genotype and phenotype files do not match"
+          write(STDERR,"(a,i)") "ERROR: Line: ",i
+          write(STDERR,"(a,a)") "ERROR: Genotype file identification: ",trim(DumC)
+          write(STDERR,"(a,a)") "ERROR: Phenotype file identification: ",trim(IdTr(i))
+          write(STDERR,"(a)") " "
+          stop 1
+        end if
+      end do
 
-    call momentR4(PhenTr(:,1),nAnisTr,ave,adev,sdev,var,skew,curt)
+      call CalcMoments(PhenoTr(:,1),TmpStat)
+      MeanY=TmpStat%Mean
+      VarY=TmpStat%Var
+      PhenoTr(:,1)=(PhenoTr(:,1)-MeanY)/TmpStat%SD
 
-    PhenTr(:,1)=(PhenTr(:,1)-ave)/sdev
-    VarY=var
-
-    SumExpVarX=0.0
-    SumObsVarX=0.0
-    Sum2pq=0.0
-    do j=1,nSnp
+      SumExpVarX=0.0d0
+      SumObsVarX=0.0d0
+      do j=1,nSnp
 
         ! Compute allele freqs
-        AlleleFreq(j)=0.0
+        AlleleFreq(j)=0.0d0
         nNotMissing=0
         do i=1,nAnisTr
-            if ((GenosTr(i,j)>-0.1).and.(GenosTr(i,j)<2.1)) then
-                AlleleFreq(j)=AlleleFreq(j)+GenosTr(i,j)
-                nNotMissing=nNotMissing+1
-            endif
-        enddo
+          if ((GenosTr(i,j)>-0.1).and.(GenosTr(i,j)<2.1)) then
+            AlleleFreq(j)=AlleleFreq(j)+GenosTr(i,j)
+            nNotMissing=nNotMissing+1
+          end if
+        end do
         if (nNotMissing/=0) then
-            AlleleFreq(j)=AlleleFreq(j)/float(2*nNotMissing)
+          AlleleFreq(j)=AlleleFreq(j)/dble(2*nNotMissing)
         else
-            AlleleFreq(j)=0.0
-        endif
-        write(UnitAlleleFreq,"(i8,f11.8)") j,AlleleFreq(j)
+          AlleleFreq(j)=0.0d0
+        end if
+        !write(UnitAlleleFreq,"(i11,1x,f11.8)") j,AlleleFreq(j)
 
         ! Fix any odd data
         do i=1,nAnisTr
-            if ((GenosTr(i,j)<-0.1).or.(GenosTr(i,j)>2.1)) then
-                GenosTr(i,j)=2.0*AlleleFreq(j)
-            endif
-        enddo
+          if ((GenosTr(i,j)<-0.1).or.(GenosTr(i,j)>2.1)) then
+            GenosTr(i,j)=2.0d0*AlleleFreq(j)
+          end if
+        end do
 
         ! Standardize
-        ExpVarX=2.0*(1.0-AlleleFreq(j))*AlleleFreq(j)+0.00001
-        Sum2pq=Sum2pq+ExpVarX
+        call CalcMoments(GenosTr(:,j),TmpStat)
+        ExpVarX=2.0d0*(1.0d0-AlleleFreq(j))*AlleleFreq(j)+0.00001d0 ! if p=0.00001, then 2*p*q=0.00001
         SumExpVarX=SumExpVarX+ExpVarX
-        ObsVarX=var+0.00001
+        ObsVarX=TmpStat%Var+0.00001d0
         SumObsVarX=SumObsVarX+ObsVarX
 
         ! ... center
-        GenosTr(:,j)=GenosTr(:,j)-(2.0*AlleleFreq(j))
+        GenosTr(:,j)=GenosTr(:,j)-(2.0d0*AlleleFreq(j))
 
         ! ... scale
+        if (ScalingOpt==1) then
+          ScaleCoef(j)=1.0d0
+        end if
+
         if (ScalingOpt==2) then
-            ! Scale by marker specific variance - expected
-            ExpVarX=sqrt(ExpVarX)
-            GenosTr(:,j)=GenosTr(:,j)/ExpVarX
-        endif
+          ! Scale by marker specific variance - expected
+          ExpVarX=sqrt(ExpVarX)
+          GenosTr(:,j)=GenosTr(:,j)/ExpVarX
+          ScaleCoef(j)=ExpVarX
+        end if
 
         if (ScalingOpt==3) then
-            ! Scale by marker specific variance - observed
-            ObsVarX=sqrt(ObsVarX)
-            GenosTr(:,j)=GenosTr(:,j)/ObsVarX
-        endif
+          ! Scale by marker specific variance - observed
+          ObsVarX=sqrt(ObsVarX)
+          GenosTr(:,j)=GenosTr(:,j)/ObsVarX
+          ScaleCoef(j)=ObsVarX
+        end if
 
-    enddo
+      end do
 
-    if (ScalingOpt==4) then
+      if (ScalingOpt==4) then
         ! Scale by average marker variance - expected
-        ExpVarX=sqrt(SumExpVarX/float(nSnp))
+        ExpVarX=sqrt(SumExpVarX/dble(nSnp))
         GenosTr(:,:)=GenosTr(:,:)/ExpVarX
-    endif
+        ScaleCoef(:)=ExpVarX
+      end if
 
-    if (ScalingOpt==5) then
+      if (ScalingOpt==5) then
         ! Scale by average marker variance - observed
-        ObsVarX=sqrt(SumObsVarX/float(nSnp))
+        ObsVarX=sqrt(SumObsVarX/dble(nSnp))
         GenosTr(:,:)=GenosTr(:,:)/ObsVarX
-    endif
+        ScaleCoef(:)=ObsVarX
+      end if
 
-    close(UnitGenoTr)
-    close(UnitPhenoTr)
-    close(UnitAlleleFreq)
-end subroutine ReadData
+      close(UnitGenoTr)
+      close(UnitPhenoTr)
+      !close(UnitAlleleFreq)
+    end subroutine
 
-!###############################################################################
+    !###########################################################################
 
-subroutine RidgeRegression
-    use Global
-    implicit none
+    subroutine RidgeRegression
+      implicit none
 
-    integer :: h,j,snpid,RandomOrdering(nSnp)
+      integer(int32) :: Iter,j,SnpId,RandomOrdering(nSnp)
 
-    real(4) :: sdot,Eps,InvLhs,Rhs,Lhs,SolOld,OneR,ZeroR,nAnisTrR,LambdaSnp
-    real(4),allocatable :: XpX(:,:),Xg(:,:),E(:,:)
+      real(real64) :: ddot,Eps,Rhs,Lhs,SolOld,LambdaSnp
+      real(real64),allocatable :: XpX(:,:),Xg(:,:),E(:,:)
 
-    allocate(XpX(nSnp,1))
-    allocate(Xg(nAnisTr,1))
-    allocate(E(nAnisTr,1))
+      allocate(XpX(nSnp,1))
+      allocate(Xg(nAnisTr,1))
+      allocate(E(nAnisTr,1))
 
-    OneR=1.0
-    ZeroR=0.0
-    Mu=0.0
-    G=0.000001
-    nAnisTrR=float(nAnisTr)
+      Mu=0.0d0
+      G=0.000001d0
 
-    ! Construct XpX and Lambda
-    do j=1,nSnp
-        XpX(j,1)=sdot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + 0.000000000000001
-    enddo
+      ! Construct XpX and Lambda
+      do j=1,nSnp
+        XpX(j,1)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + 0.000000000000001d0
+      end do
 
-    LambdaSnp=VarE/(VarA/float(nSnp))
+      LambdaSnp=VarE/(VarG/dble(nSnp))
 
-    ! Working phenotypes
-    E(:,1)=PhenTr(:,1)
+      ! Working phenotypes
+      E(:,1)=PhenoTr(:,1)
 
-    !open(unit=6,form="formatted",CARRIAGECONTROL="FORTRAN")
-    do h=1,nRound
-        !             123456789 123456789 123456789 123456789 123456789 12
-        !write(6,100) " Ridge regression (fixed variance components) round ",h
-        !100 format("+",a52,i10)
-
-        !Intercept
+      do Iter=1,nIter
+        ! Intercept
         E(:,1)=E(:,1)+Mu
-        Rhs=sum(E(:,1))
-        InvLhs=1.0/nAnisTrR
-        Mu=Rhs*InvLhs
+        Mu=sum(E(:,1))/nAnisTrR
         E(:,1)=E(:,1)-Mu
 
-        !Snp effects
-        eps=0.0
-        call random_order(RandomOrdering,nSnp,idum)
+        ! Snp effects
+        eps=0.0d0
+        call RandomOrder(RandomOrdering,nSnp)
         do j=1,nSnp
-            snpid=RandomOrdering(j)
-            E(:,1)=E(:,1)+(GenosTr(:,snpid)*G(snpid,1))
-            Lhs=XpX(snpid,1)+LambdaSnp
-            Rhs=sdot(nAnisTr,GenosTr(:,snpid),1,E(:,1),1)
-            SolOld=G(snpid,1)
-            G(snpid,1)=Rhs/Lhs
-            E(:,1)=E(:,1)-(GenosTr(:,snpid)*G(snpid,1))
-            Eps=Eps+(G(snpid,1)-SolOld)**2
-        enddo
+          SnpId=RandomOrdering(j)
+          E(:,1)=E(:,1)+(GenosTr(:,SnpId)*G(SnpId,1))
+          Lhs=XpX(SnpId,1)+LambdaSnp
+          Rhs=ddot(nAnisTr,GenosTr(:,SnpId),1,E(:,1),1)
+          SolOld=G(SnpId,1)
+          G(SnpId,1)=Rhs/Lhs
+          E(:,1)=E(:,1)-(GenosTr(:,SnpId)*G(SnpId,1))
+          Eps=Eps+(G(SnpId,1)-SolOld)**2
+        end do
 
-        if (mod(h,200)==0) then
-            call sgemm("n","n",nAnisTr,1,nSnp,OneR,GenosTr,nAnisTr,G,nSnp,ZeroR,Xg,nAnisTr)
-            E(:,1)=PhenTr(:,1)-Xg(:,1)-Mu
-        endif
+        if (mod(Iter,200)==0) then
+          call dgemm("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Xg,nAnisTr)
+          E(:,1)=PhenoTr(:,1)-Xg(:,1)-Mu
+        end if
 
-        if (eps.lt.1e-8) then
-            exit
-        endif
-    enddo
-    !close(6)
+        if (eps < 1e-8) then
+          exit
+        end if
+      end do
 
-    deallocate(XpX)
-    deallocate(Xg)
-    deallocate(E)
-end subroutine RidgeRegression
+      deallocate(XpX)
+      deallocate(Xg)
+      deallocate(E)
+    end subroutine
 
-!###############################################################################
+    !###########################################################################
 
-subroutine RidgeRegressionMCMC
-    use Global
-    implicit none
+    subroutine RidgeRegressionMCMC
+      implicit none
 
-    integer :: i,h,j,snpid,RandomOrdering(nSnp)
+      integer(int32) :: i,Iter,j,SnpId,RandomOrdering(nSnp),UnitVar
 
-    real(4) :: sdot,InvLhs,Rhs,Lhs,OneR,ZeroR,nAnisTrR,LambdaSnp,EpE,VarG,GpG
-    real(4) :: nSampR!,VarEAccum,VarGAccum
-    real(4),allocatable :: GAccum(:,:),SX2(:),MX2(:),XpX(:,:),Xg(:,:),E(:,:)
-    real(8) :: random_gamma,gasdev,R2,EDF0,EDF2,GDF0,GDF2,ES0,GS0,MSX
+      real(real64) :: ddot,Rhs,Lhs,LambdaSnp,nSampR,VarESamp,VarGSamp,VarGAccum,VarEAccum
+      real(real64) :: R2,EDF0,EDF2,GDF0,GDF2,ES0,GS0,MSX,EpE,GpG
+      real(real64),allocatable :: GAccum(:,:),SX2(:),MX2(:),XpX(:,:),Xg(:,:),E(:,:)
+      real(real64),allocatable :: GaussDev(:),GammaDevE(:),GammaDevG(:)
 
-    allocate(XpX(nSnp,1))
-    allocate(Xg(nAnisTr,1))
-    allocate(GAccum(nSnp,1))
-    allocate(SX2(nSnp))
-    allocate(MX2(nSnp))
-    allocate(E(nAnisTr,1))
+      allocate(XpX(nSnp,1))
+      allocate(Xg(nAnisTr,1))
+      allocate(E(nAnisTr,1))
+      allocate(GAccum(nSnp,1))
+      allocate(SX2(nSnp))
+      allocate(MX2(nSnp))
+      allocate(GaussDev(nSnp))
+      allocate(GammaDevE(nIter))
+      allocate(GammaDevG(nIter))
 
-    OneR=1.0
-    ZeroR=0.0
-    Mu=0.0
-    G=0.1
-    GAccum=0.0
+      Mu=0.0d0
+      G=0.1d0
+      GAccum=0.0d0
+      VarGAccum=0.0d0
+      VarEAccum=0.0d0
 
-    nAnisTrR=float(nAnisTr)
-    R2=0.5
+      ! These prior parameters are modelled as in BGLR
+      R2=0.5d0
 
-    EDF0=5.0
-    EDF2=(float(nAnisTr)+EDF0)/2.0
-    ES0=(VarY*(1.0-R2))*(EDF0+2.0)
+      EDF0=5.0d0
+      EDF2=(dble(nAnisTr)+EDF0)/2.0d0
+      ES0=(VarY*(1.0d0-R2))*(EDF0+2.0d0)
 
-    GDF0=5.0
-    GDF2=(float(nSnp)+GDF0)/2.0
-    SX2(:)=0.0
-    MX2(:)=0.0
-    do i=1,nSnp
+      GDF0=5.0d0
+      GDF2=(dble(nSnp)+GDF0)/2.0d0
+      SX2(:)=0.0d0
+      MX2(:)=0.0d0
+      do i=1,nSnp
         SX2(i)=sum(GenosTr(:,i)*GenosTr(:,i))
         MX2(i)=sum(GenosTr(:,i))/nAnisTrR
         MX2(i)=MX2(i)*MX2(i)
-    enddo
-    MSX=sum(SX2)/nAnisTrR-sum(MX2)
-    GS0=((VarY*R2)/MSX)*(GDF0+2.0)
+      end do
+      MSX=sum(SX2)/nAnisTrR-sum(MX2)
+      GS0=((VarY*R2)/MSX)*(GDF0+2.0d0)
 
-    ! Construct XpX
-    do j=1,nSnp
-        XpX(j,1)=sdot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + 0.000000000000001
-    enddo
+      deallocate(SX2)
+      deallocate(MX2)
 
-    ! Working phenotypes
-    E(:,1)=PhenTr(:,1)
+      ! Construct XpX
+      do j=1,nSnp
+        XpX(j,1)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + 0.000000000000001d0
+      end do
 
-    !open(unit=6,form="formatted",CARRIAGECONTROL="FORTRAN")
-    nSampR=float(nRound-nBurn)
-    do h=1,nRound
-        !             123456789 123456789 123456789 123456789 123456789 123456
-        !write(6,100) " Ridge regression (MCMC for all model parameters) round ",h
-        !100 format("+",a56,i10)
+      ! Working phenotypes
+      E(:,1)=PhenoTr(:,1)
 
+      ! Gamma deviates
+      GammaDevE(:)=SampleIntelGammaD(n=nIter,alpha=EDF2,beta=2.0d0)
+      GammaDevG(:)=SampleIntelGammaD(n=nIter,alpha=GDF2,beta=2.0d0)
+
+      nSampR=dble(nIter-nBurn)
+      do Iter=1,nIter
         ! Residual variance
-        EpE=sdot(nAnisTr,E(:,1),1,E(:,1),1) + ES0 + 0.000000000000001
-        VarE=EpE/real(random_gamma(idum,EDF2,2.0d0,.true.))
+        EpE=ddot(nAnisTr,E(:,1),1,E(:,1),1) + ES0 + 0.000000000000001d0
+        VarESamp=EpE/GammaDevE(Iter)
 
         ! Snp variance
-        GpG=sdot(nSnp,G(:,1),1,G(:,1),1) + GS0 + 0.000000000000001
-        VarG=GpG/real(random_gamma(idum,GDF2,2.0d0,.true.))
+        GpG=ddot(nSnp,G(:,1),1,G(:,1),1) + GS0 + 0.000000000000001d0
+        VarGSamp=GpG/GammaDevG(Iter)
 
         ! Ratio of variances
-        LambdaSnp=VarE/VarG
+        LambdaSnp=VarESamp/VarGSamp
 
-        !Intercept
+        ! Intercept
         E(:,1)=E(:,1)+Mu
-        Rhs=sum(E(:,1))
-        InvLhs=1.0/nAnisTrR
-        Mu=Rhs*InvLhs
+        Mu=sum(E(:,1))/nAnisTrR
         E(:,1)=E(:,1)-Mu
 
-        !Snp effects
-        call random_order(RandomOrdering,nSnp,idum)
+        ! Snp effects
+        call RandomOrder(RandomOrdering,nSnp)
+        GaussDev(:)=SampleIntelGaussD(n=nSnp)
         do j=1,nSnp
-            snpid=RandomOrdering(j)
-            E(:,1)=E(:,1)+(GenosTr(:,snpid)*G(snpid,1))
-            Lhs=XpX(snpid,1)+LambdaSnp
-            Rhs=sdot(nAnisTr,GenosTr(:,snpid),1,E(:,1),1)
-            G(snpid,1)=(Rhs/Lhs)+(gasdev(idum)*sqrt(1.0/Lhs))
-            E(:,1)=E(:,1)-(GenosTr(:,snpid)*G(snpid,1))
-        enddo
-        if (h>nBurn) then
-            GAccum=GAccum+G/nSampR
-            !VarGAccum=VarGAccum+VarE/nSampR
-            !VarEAccum=VarEAccum+VarG/nSampR
-        endif
+          SnpId=RandomOrdering(j)
+          E(:,1)=E(:,1)+(GenosTr(:,SnpId)*G(SnpId,1))
+          Lhs=XpX(SnpId,1)+LambdaSnp
+          Rhs=ddot(nAnisTr,GenosTr(:,SnpId),1,E(:,1),1)
+          G(SnpId,1)=(Rhs/Lhs)+(GaussDev(SnpId)/sqrt(Lhs))
+          E(:,1)=E(:,1)-(GenosTr(:,SnpId)*G(SnpId,1))
+        end do
+        if (Iter>nBurn) then
+          GAccum=GAccum+G/nSampR
+          VarGAccum=VarGAccum+VarGSamp/nSampR
+          VarEAccum=VarEAccum+VarESamp/nSampR
+        end if
 
         ! Recompute residuals to avoid rounding errors
-        if (mod(h,200)==0) then
-            call sgemm("n","n",nAnisTr,1,nSnp,OneR,GenosTr,nAnisTr,G,nSnp,ZeroR,Xg,nAnisTr)
-            E(:,1)=PhenTr(:,1)-Xg(:,1)-Mu
-        endif
+        if (mod(Iter,200)==0) then
+          call dgemm("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Xg,nAnisTr)
+          E(:,1)=PhenoTr(:,1)-Xg(:,1)-Mu
+        end if
 
-    enddo
-    close(6)
+      end do
 
-    G=GAccum
-    !VarG=VarGAccum
-    !VarE=VarEAccum
+      G=GAccum
+      open(newunit=UnitVar,file="ResidualVarianceEstimate.txt",status="unknown")
+      write(UnitVar,"(f20.10)") VarEAccum
+      close(UnitVar)
+      open(newunit=UnitVar,file="SnpVarianceEstimate.txt",status="unknown")
+      write(UnitVar,"(f20.10)") VarGAccum
+      close(UnitVar)
 
-    deallocate(XpX)
-    deallocate(Xg)
-    deallocate(GAccum)
-    deallocate(SX2)
-    deallocate(MX2)
-    deallocate(E)
-end subroutine RidgeRegressionMCMC
+      deallocate(XpX)
+      deallocate(Xg)
+      deallocate(E)
+      deallocate(GAccum)
+    end subroutine
 
-!###############################################################################
+    !###########################################################################
 
-subroutine BayesA
-    use Global
-    implicit none
+    subroutine BayesA
+      implicit none
 
-    integer :: h,j,snpid,RandomOrdering(nSnp)
+      integer(int32) :: Iter,j,SnpId,RandomOrdering(nSnp)
 
-    real(4) :: sdot,InvLhs,Rhs,Lhs,OneR,ZeroR,LambdaSnp,EpE,nSampR,nAnisTrR
-    real(4),allocatable :: GAccum(:,:),GVar(:,:),XpX(:,:),Xg(:,:),E(:,:)
-    real(8) :: random_gamma,gasdev,vdf,ShapeCoefficient,ScaleCoefficient,sc,gampe1,gampe2
+      real(real64) :: ddot,Rhs,Lhs,LambdaSnp,EpE,nSampR,VarESamp
+      real(real64),allocatable :: GAccum(:,:),VarGSamp(:,:),XpX(:,:),Xg(:,:),E(:,:)
+      real(real64) :: vdf,ShapeCoefficient,ScaleCoefficient,sc,gampe1,gampe2
+      real(real64),allocatable :: GaussDev(:),GammaDevE(:),GammaDevG(:)
 
-    allocate(XpX(nSnp,1))
-    allocate(Xg(nAnisTr,1))
-    allocate(GVar(nSnp,1))
-    allocate(GAccum(nSnp,1))
-    allocate(E(nAnisTr,1))
+      allocate(XpX(nSnp,1))
+      allocate(Xg(nAnisTr,1))
+      allocate(E(nAnisTr,1))
+      allocate(VarGSamp(nSnp,1))
+      allocate(GAccum(nSnp,1))
+      allocate(GaussDev(nSnp))
+      allocate(GammaDevE(nIter))
+      allocate(GammaDevG(nSnp))
 
-    OneR=1.0
-    ZeroR=0.0
-    Mu=0.0
-    G=0.1
-    GAccum=0
-    nAnisTrR=float(nAnisTr)
+      Mu=0.0d0
+      G=0.1d0
+      GAccum=0.0d0
 
-    vdf=4.012
-    ShapeCoefficient=(vdf/2.0) !Ben
-    ScaleCoefficient=((vdf-2.0)*VarA)/Sum2pq
-    sc=2.0
-    gampe1=(float(nAnisTr)/2.0)-2.0
-    gampe2=2.0
+      ! TODO: model the prior parameters as in BGLR
+      vdf=4.012d0
+      ShapeCoefficient=(vdf/2.0d0) !Ben
+      ScaleCoefficient=((vdf-2.0d0)*VarG)/SumExpVarX
+      sc=2.0d0
+      gampe1=(dble(nAnisTr)/2.0d0)-2.0d0
+      gampe2=2.0d0
 
-    ! Construct XpX
-    do j=1,nSnp
-        XpX(j,1)=sdot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + 0.000000000000001
-    enddo
+      ! Construct XpX
+      do j=1,nSnp
+          XpX(j,1)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + 0.000000000000001d0
+      end do
 
-    ! Working phenotypes
-    E(:,1)=PhenTr(:,1)
+      ! Working phenotypes
+      E(:,1)=PhenoTr(:,1)
 
-    !open(unit=6,form='formatted',CARRIAGECONTROL='FORTRAN')
-    nSampR=float(nRound-nBurn)
-    do h=1,nRound
-        !             123456789 1234
-        !write(6,100) " BayesA round ",h
-        !100 format('+',a14,i10)
-
+      nSampR=dble(nIter-nBurn)
+      GammaDevE(:)=SampleIntelGammaD(n=nIter,alpha=gampe1,beta=gampe2)
+      do Iter=1,nIter
         ! Residual variance
-        EpE=sdot(nAnisTr, E(:,1), 1, E(:,1), 1) + 0.000000000000001
-        VarE=EpE/real(random_gamma(idum,gampe1,gampe2,.true.))
+        EpE=ddot(nAnisTr,E(:,1),1,E(:,1),1) + 0.000000000000001d0
+        VarESamp=EpE/GammaDevE(Iter)
 
         ! Snp variances
-        do j=1,nSnp
-            GVar(j,1)=(ScaleCoefficient+(G(j,1)**2))/real(random_gamma(idum,ShapeCoefficient,sc,.true.))
-        enddo
+        GammaDevG(:)=SampleIntelGammaD(n=nSnp,alpha=ShapeCoefficient,beta=sc)
+        VarGSamp(:,1)=(ScaleCoefficient+(G(:,1)*G(:,1)))/GammaDevG(:)
 
         !Intercept
         E(:,1)=E(:,1)+Mu
-        Rhs=sum(E(:,1))
-        InvLhs=1.0/nAnisTrR
-        Mu=Rhs*InvLhs
+        Mu=sum(E(:,1))/nAnisTrR
         E(:,1)=E(:,1)-Mu
 
         !Snp effects
-        call random_order(RandomOrdering,nSnp,idum)
+        call RandomOrder(RandomOrdering,nSnp)
+        GaussDev(:)=SampleIntelGaussD(n=nSnp)
         do j=1,nSnp
-            snpid=RandomOrdering(j)
-            E(:,1)=E(:,1)+(GenosTr(:,snpid)*G(snpid,1))
-            LambdaSnp=VarE/gvar(snpid,1)
-            Lhs=XpX(snpid,1)+LambdaSnp
-            Rhs=sdot(nAnisTr,GenosTr(:,snpid),1,E(:,1),1)
-            G(snpid,1)=(Rhs/Lhs)+(gasdev(idum)*sqrt(1.0/Lhs))
-            E(:,1)=E(:,1)-(GenosTr(:,snpid)*G(snpid,1))
-        enddo
-        if (h>nBurn) then
-            GAccum=GAccum+G/nSampR
-        endif
+          SnpId=RandomOrdering(j)
+          E(:,1)=E(:,1)+(GenosTr(:,SnpId)*G(SnpId,1))
+          LambdaSnp=VarESamp/VarGSamp(SnpId,1)
+          Lhs=XpX(SnpId,1)+LambdaSnp
+          Rhs=ddot(nAnisTr,GenosTr(:,SnpId),1,E(:,1),1)
+          G(SnpId,1)=(Rhs/Lhs)+(GaussDev(SnpId)/sqrt(Lhs))
+          E(:,1)=E(:,1)-(GenosTr(:,SnpId)*G(SnpId,1))
+        end do
+        if (Iter>nBurn) then
+          GAccum=GAccum+G/nSampR
+        end if
 
         ! Recompute residuals to avoid rounding errors
-        if (mod(h,200)==0) then
-            call sgemm('n','n',nAnisTr,1,nSnp,OneR,GenosTr,nAnisTr,G,nSnp,ZeroR,Xg,nAnisTr)
-            E(:,1)=PhenTr(:,1)-Xg(:,1)-Mu
-        endif
+        if (mod(Iter,200)==0) then
+          call dgemm('n','n',nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Xg,nAnisTr)
+          E(:,1)=PhenoTr(:,1)-Xg(:,1)-Mu
+        end if
 
-    enddo
+      end do
 
-    G=GAccum
+      G=GAccum
 
-    deallocate(XpX)
-    deallocate(Xg)
-    deallocate(GVar)
-    deallocate(GAccum)
-    deallocate(E)
-end subroutine BayesA
+      deallocate(XpX)
+      deallocate(Xg)
+      deallocate(E)
+      deallocate(VarGSamp)
+      deallocate(GAccum)
+    end subroutine
 
-!###############################################################################
+    !###########################################################################
 
-subroutine MarkerEffectPostProcessing
-    use Global
-    implicit none
-    integer :: i,j,UnitSnpSol
+    subroutine Prediction
+      implicit none
 
-    ! Rescale back to phenotype scale
-    G(:,1)=G(:,1)*sqrt(VarY)
+      integer(int32) :: i,j,Pop,UnitSum,UnitSnpSol,UnitGenoTe,UnitPhenoTe,UnitEbv
 
-    ! Output
-    open(newunit=UnitSnpSol,file="SnpSolutions.txt",status="unknown")
-    j=0
-    do i=1,nSnpExternal
-        if (FixedSnp(i)==1) then
+      real(real64),allocatable :: Ebv(:,:),PhenoTe(:,:),GenosTe(:,:)
+
+      character(len=100) :: DumC,File
+      character(len=20),allocatable :: IdTe(:)
+
+      type(CorrelationD) :: Cor
+
+      open(newunit=UnitSum,file="PredictionsSummary.txt",status="unknown")
+      write(UnitSum,"(a14,3(1x,a12),3(1x,a20))") "Set","CorObsEst","SlopeObsEst","SlopeEstObs","CovObsEst","VarObs","VarEst"
+
+      allocate(Ebv(nAnisTr,1))
+
+      open(newunit=UnitEbv,file="PredictionsForSetTrain.txt",status="unknown")
+      call dgemm("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Ebv,nAnisTr)
+      PhenoTr(:,1)=PhenoTr(:,1)*sqrt(VarY)+MeanY
+      write(UnitEbv,"(a20,2(1x,a20))") "Id","Observed","Estimate"
+      do i=1,nAnisTr
+        write(UnitEbv,"(a20,2(1x,f20.10))") IdTr(i),PhenoTr(i,1),Ebv(i,1)
+      end do
+      flush(UnitEbv)
+      close(UnitEbv)
+
+      call CalcCorrelation(PhenoTr(:,1),Ebv(:,1),Cor)
+      DumC="Train"
+      write(UnitSum,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cor%Cor,Cor%Cov/Cor%Var2,Cor%Cov/Cor%Var1,Cor%Cov,Cor%Var1,Cor%Var2
+
+      deallocate(Ebv)
+
+      ! Rescale marker estimates back to observed phenotype and genotype scale
+
+      ! y     = mu     + b*x     + e
+      ! y     = mu     + b*x/SDX + e
+      ! y     = mu     + b*z     + e
+      ! y/SDY = mu/SDY + b*z/SDY + e/SDY
+      ! y'    = mu'    + b'*z    + e'
+      ! b'*z=b /SDY*z
+      ! b*z =b'*SDY*z
+      ! b*x/SDX =b'*SDY*x/SDX
+      ! b=b'*SDY/SDX
+
+      G(:,1)=G(:,1)*sqrt(VarY)/ScaleCoef(:)
+
+      ! Output
+      open(newunit=UnitSnpSol,file="SnpEstimates.txt",status="unknown")
+      write(UnitSnpSol,"(a20,1x,a20)") "Snp","Estimate"
+      j=0
+      do i=1,nSnpExternal
+          if (FixedSnp(i)==1) then
             j=j+1
-            write(UnitSnpSol,"(i20,f20.10)") i,G(j,1)
-        else
-            write(UnitSnpSol,"(i20,f20.10)") i,0.0
-        endif
-    enddo
-    flush(UnitSnpSol)
-    close(UnitSnpSol)
-end subroutine MarkerEffectPostProcessing
+            write(UnitSnpSol,"(i20,1x,f20.10)") i,G(j,1)
+          else
+            write(UnitSnpSol,"(i20,1x,f20.10)") i,0.0d0
+          end if
+      end do
+      flush(UnitSnpSol)
+      close(UnitSnpSol)
 
-!###############################################################################
+      i=maxval(nAnisTe(:))
+      allocate(IdTe(i))
+      allocate(GenosTe(i,nSnp))
+      allocate(PhenoTe(i,1))
+      allocate(Ebv(i,1))
 
-subroutine Prediction
-    use Global
-    implicit none
-
-    integer :: i,j,Pop,UnitCor,UnitGenoTe,UnitPhenoTe,UnitEbv
-    integer,allocatable :: IdTe(:)
-
-    real(4) :: OneR,ZeroR,Cor,Var1,Var2,Cov12
-    real(4),allocatable :: Ebv(:,:),PhenoTe(:,:),GenosTe(:,:)
-
-    character(len=100) :: DumC
-
-    OneR=1.0
-    ZeroR=0.0
-
-    open(newunit=UnitCor,file="TbvEbvCorrelation.txt",status="unknown")
-    do Pop=1,nTePop
-        allocate(IdTe(nAnisTe(Pop)))
-        allocate(GenosTe(nAnisTe(Pop),nSnp))
-        allocate(PhenoTe(nAnisTe(Pop),1))
-        allocate(Ebv(nAnisTe(Pop),1))
+      do Pop=1,nTePop
 
         open(newunit=UnitGenoTe,file=trim(GenoTeFile(Pop)),status="old")
         open(newunit=UnitPhenoTe,file=trim(PhenoTeFile(Pop)),status="old")
 
         do i=1,nAnisTe(Pop)
-            read(UnitGenoTe,*) IdTe(i),SnpTmp(:)
-            GenosTe(i,:)=SnpTmp(SnpPosition(:))
-            read(UnitPhenoTe,*) DumC,PhenoTe(i,1)
-        enddo
+          read(UnitGenoTe,*) IdTe(i),SnpTmp(:)
+          GenosTe(i,:)=SnpTmp(SnpPosition(:))
+          read(UnitPhenoTe,*) DumC,PhenoTe(i,1)
+        end do
 
         do j=1,nSnp
-            ! Fix any odd data
-            do i=1,nAnisTe(Pop)
-                if ((GenosTe(i,j)<-0.1).or.(GenosTe(i,j)>2.1)) then
-                    GenosTe(i,j)=2.0*AlleleFreq(j)
-                endif
-            enddo
+          ! Fix any odd data
+          do i=1,nAnisTe(Pop)
+            if ((GenosTe(i,j)<-0.1).or.(GenosTe(i,j)>2.1)) then
+              GenosTe(i,j)=2.0d0*AlleleFreq(j)
+            end if
+          end do
 
-            ! Standardize
+          ! Standardize
 
-            ! ... center
-            GenosTe(:,j)=GenosTe(:,j)-(2.0*AlleleFreq(j))
+          ! ... center
+          GenosTe(:,j)=GenosTe(:,j)-(2.0d0*AlleleFreq(j))
 
-            ! ... scale
-            if (ScalingOpt==2) then
-                ! Scale by marker specific variance - expected
-                GenosTe(:,j)=GenosTe(:,j)/ExpVarX
-            endif
-
-            if (ScalingOpt==3) then
-                ! Scale by marker specific variance - observed
-                GenosTe(:,j)=GenosTe(:,j)/ObsVarX
-            endif
-        enddo
-
-        if (ScalingOpt==4) then
-            ! Scale by average marker variance - expected
-            GenosTe(:,:)=GenosTe(:,:)/ExpVarX
-        endif
-
-        if (ScalingOpt==5) then
-            ! Scale by average marker variance - observed
-            GenosTe(:,:)=GenosTe(:,:)/ObsVarX
-        endif
+          ! ... scale
+          ! no need because we scaled the marker solutions
+        end do
 
         close(UnitGenoTe)
         close(UnitPhenoTe)
 
-        open(newunit=UnitEbv,file="Ebv.txt",status="unknown")
-        call sgemm("n","n",nAnisTe(Pop),1,nSnp,OneR,GenosTe,nAnisTe(Pop),G,nSnp,ZeroR,Ebv,nAnisTe(Pop))
+        File="PredictionsForSetPredict"//Int2Char(Pop)//".txt"
+        open(newunit=UnitEbv,file=trim(File),status="unknown")
+        call dgemm("n","n",nAnisTe(Pop),1,nSnp,ONER,GenosTe(1:nAnisTe(Pop),:),nAnisTe(Pop),G,nSnp,ZEROR,Ebv(1:nAnisTe(Pop),1),nAnisTe(Pop))
+        write(UnitEbv,"(a20,2(1x,a20))") "Id","Observed","Estimate"
         do i=1,nAnisTe(Pop)
-            write(UnitEbv,"(i20,2f20.10)") IdTe(i),Ebv(i,1)
-        enddo
+          write(UnitEbv,"(a20,2(1x,f20.10))") IdTe(i),PhenoTe(i,1),Ebv(i,1)
+        end do
         flush(UnitEbv)
         close(UnitEbv)
 
-        call PearsnR4(PhenoTe(:,1),Ebv(:,1),nAnisTe(Pop),Cor,Var1,Var2,Cov12)
-        write(UnitCor,"(i4,3f7.3,3f20.10)") Pop,Cor,Cov12/Var2,Cov12/Var1,Var1/float(nAnisTe(Pop)),Var2/float(nAnisTe(Pop)),Cov12/float(nAnisTe(Pop))
+        call CalcCorrelation(PhenoTe(1:nAnisTe(Pop),1),Ebv(1:nAnisTe(Pop),1),Cor)
+        DumC="Predict"//Int2Char(Pop)
+        write(UnitSum,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cor%Cor,Cor%Cov/Cor%Var2,Cor%Cov/Cor%Var1,Cor%Cov,Cor%Var1,Cor%Var2
 
-        deallocate(IdTe)
-        deallocate(GenosTe)
-        deallocate(PhenoTe)
-        deallocate(Ebv)
-    enddo
-    flush(UnitCor)
-    close(UnitCor)
-end subroutine Prediction
+      end do
 
-!###############################################################################
+      deallocate(IdTe)
+      deallocate(GenosTe)
+      deallocate(PhenoTe)
+      deallocate(Ebv)
 
-SUBROUTINE momentR4(DATA,n,ave,adev,sdev,var,skew,curt)
-    IMPLICIT NONE
-    INTEGER n,j
-    real(4) :: adev,ave,curt,sdev,skew,var,DATA(n)
-    real(4) :: p,s,ep
-    IF (n.le.1) PAUSE 'n must be at least 2 in moment'
-    s=0.0
-    DO j=1,n
-        s=s+DATA(j)
-    END DO
+      flush(UnitSum)
+      close(UnitSum)
+    end subroutine
 
-    ave=s/float(n)
-    adev=0.0
-    var=0.0
-    skew=0.0
-    curt=0.0
-    ep=0.0
-
-    DO j=1,n
-        s=DATA(j)-ave
-        ep=ep+s
-        adev=adev+ABS(s)
-        p=s*s
-        var=var+p
-        p=p*s
-        skew=skew+p
-        p=p*s
-        curt=curt+p
-    END DO
-
-    adev=adev/float(n)
-    var=(var-ep**2.0/float(n))/(float(n)-1.0)
-    sdev=SQRT(var)
-    IF (var.ne.0) then
-        skew=skew/(float(n)*sdev**3.0)
-        curt=curt/(float(n)*var**2.0)-3.0
-    ELSE
-        !PRINT*, 'no skew or kurtosis when zero variance in moment'
-        !PAUSE 'no skew or kurtosis when zero variance in moment'
-    END IF
-    RETURN
-END SUBROUTINE momentR4
-
-!###############################################################################
-
-! This Function returns a uniform random deviate between 0.0 and 1.0.
-! Set IDUM to any negative value to initialize or reinitialize the sequence.
-!MODIFIED FOR REAL
-
-FUNCTION ran1(idum)
-IMPLICIT NONE
- INTEGER idum,IA,IM,IQ,IR,NTAB,NDIV
- DOUBLE PRECISION ran1,AM,EPS,RNMX
- PARAMETER (IA=16807,IM=2147483647,AM=1./IM,IQ=127773,IR=2836,NTAB=32,NDIV=1+(IM-1)/NTAB,EPS=1.2e-7,RNMX=1.-EPS)
- INTEGER j,k,iv(NTAB),iy
- SAVE iv,iy
- DATA iv /NTAB*0/, iy /0/
-  IF (idum.le.0.or.iy.eq.0) then
-      idum=max(-idum,1)
-  DO 11 j=NTAB+8,1,-1
-      k=idum/IQ
-      idum=IA*(idum-k*IQ)-IR*k
-  IF (idum.lt.0) idum=idum+IM
-  IF (j.le.NTAB) iv(j)=idum
-
-11 CONTINUE
-     iy=iv(1)
-  END IF
-     k=idum/IQ
-     idum=IA*(idum-k*IQ)-IR*k
-  IF (idum.lt.0) idum=idum+IM
-     j=1+iy/NDIV
-     iy=iv(j)
-     iv(j)=idum
-     ran1=min(AM*iy,RNMX)
-  RETURN
-END
-
-!###############################################################################
-
-FUNCTION random_gamma(idum,s, b, first) RESULT(fn_val)
-    IMPLICIT NONE
-
-    ! Adapted from Fortran 77 code from the book:
-    !     Dagpunar, J. 'Principles of random variate generation'
-    !     Clarendon Press, Oxford, 1988.   ISBN 0-19-852202-9
-
-    !     N.B. This version is in `double precision' and includes scaling
-
-    !     FUNCTION GENERATES A RANDOM GAMMA VARIATE.
-    !     CALLS EITHER random_gamma1 (S > 1.0)
-    !     OR random_exponential (S = 1.0)
-    !     OR random_gamma2 (S < 1.0).
-
-    !     S = SHAPE PARAMETER OF DISTRIBUTION (0 < REAL).
-    !     B = Scale parameter
-
-    !IMPLICIT NONE
-    INTEGER, PARAMETER  :: dp = SELECTED_REAL_KIND(12, 60)
-    INTEGER :: idum
-
-    DOUBLE PRECISION, INTENT(IN)  :: s, b
-    LOGICAL, INTENT(IN)    :: first
-    DOUBLE PRECISION              :: fn_val
-
-    ! Local parameters
-    DOUBLE PRECISION, PARAMETER  :: one = 1.0_dp, zero = 0.0_dp
-
-    IF (s <= zero) THEN
-      WRITE(*, *) 'SHAPE PARAMETER VALUE MUST BE POSITIVE'
-      STOP
-    END IF
-
-    IF (s >= one) THEN
-      fn_val = random_gamma1(s, first)
-    ELSE IF (s < one) THEN
-      fn_val = random_gamma2(s, first)
-    END IF
-
-    ! Now scale the random variable
-    fn_val = b * fn_val
-    RETURN
-
-    CONTAINS
-
-    FUNCTION random_gamma1(s, first) RESULT(fn_val)
-        IMPLICIT NONE
-
-        ! Adapted from Fortran 77 code from the book:
-        !     Dagpunar, J. 'Principles of random variate generation'
-        !     Clarendon Press, Oxford, 1988.   ISBN 0-19-852202-9
-
-        ! FUNCTION GENERATES A RANDOM VARIATE IN [0,INFINITY) FROM
-        ! A GAMMA DISTRIBUTION WITH DENSITY PROPORTIONAL TO GAMMA**(S-1)*EXP(-GAMMA),
-        ! BASED UPON BEST'S T DISTRIBUTION METHOD
-
-        !     S = SHAPE PARAMETER OF DISTRIBUTION
-        !          (1.0 < REAL)
-
-        DOUBLE PRECISION, INTENT(IN)  :: s
-        LOGICAL, INTENT(IN)    :: first
-        DOUBLE PRECISION              :: fn_val
-
-        !     Local variables
-        DOUBLE PRECISION             :: d, r, g, f, x
-        DOUBLE PRECISION, SAVE       :: b, h
-        DOUBLE PRECISION, PARAMETER  :: sixty4 = 64.0_dp, three = 3.0_dp, pt75 = 0.75_dp,  &
-                                 two = 2.0_dp, half = 0.5_dp
-        DOUBLE PRECISION :: ran1
-
-        IF (s <= one) THEN
-          WRITE(*, *) 'IMPERMISSIBLE SHAPE PARAMETER VALUE'
-          STOP
-        END IF
-
-        IF (first) THEN                        ! Initialization, if necessary
-          b = s - one
-          h = SQRT(three*s - pt75)
-        END IF
-
-        DO
-          r=ran1(idum)
-          g = r - r*r
-          IF (g <= zero) CYCLE
-          f = (r - half)*h/SQRT(g)
-          x = b + f
-          IF (x <= zero) CYCLE
-          r=ran1(idum)
-          d = sixty4*g*(r*g)**2
-          IF (d <= zero) EXIT
-          IF (d*x < x - two*f*f) EXIT
-          IF (LOG(d) < two*(b*LOG(x/b) - f)) EXIT
-        END DO
-        fn_val = x
-
-        RETURN
-    END FUNCTION random_gamma1
-
-    FUNCTION random_gamma2(s, first) RESULT(fn_val)
-        IMPLICIT NONE
-
-        ! Adapted from Fortran 77 code from the book:
-        !     Dagpunar, J. 'Principles of random variate generation'
-        !     Clarendon Press, Oxford, 1988.   ISBN 0-19-852202-9
-
-        ! FUNCTION GENERATES A RANDOM VARIATE IN [0,INFINITY) FROM
-        ! A GAMMA DISTRIBUTION WITH DENSITY PROPORTIONAL TO
-        ! GAMMA2**(S-1) * EXP(-GAMMA2),
-        ! USING A SWITCHING METHOD.
-
-        !    S = SHAPE PARAMETER OF DISTRIBUTION
-        !          (REAL < 1.0)
-
-        DOUBLE PRECISION, INTENT(IN)  :: s
-        LOGICAL, INTENT(IN)    :: first
-        DOUBLE PRECISION              :: fn_val
-
-        !     Local variables
-        DOUBLE PRECISION            :: r, x, w
-        DOUBLE PRECISION, SAVE       :: a, p, c, uf, vr, d
-        DOUBLE PRECISION, PARAMETER  :: vsmall = EPSILON(one)
-        DOUBLE PRECISION :: ran1
-
-        IF (s <= zero .OR. s >= one) THEN
-          WRITE(*, *) 'SHAPE PARAMETER VALUE OUTSIDE PERMITTED RANGE'
-          STOP
-        END IF
-
-        IF (first) THEN                        ! Initialization, if necessary
-          a = one - s
-          p = a/(a + s*EXP(-a))
-          IF (s < vsmall) THEN
-            WRITE(*, *) 'SHAPE PARAMETER VALUE TOO SMALL'
-            PRINT*, s
-            STOP
-          END IF
-          c = one/s
-          uf = p*(vsmall/a)**s
-          vr = one - vsmall
-          d = a*LOG(a)
-        END IF
-
-        DO
-          r=ran1(idum)
-          IF (r >= vr) THEN
-            CYCLE
-          ELSE IF (r > p) THEN
-            x = a - LOG((one - r)/(one - p))
-            w = a*LOG(x)-d
-          ELSE IF (r > uf) THEN
-            x = a*(r/p)**c
-            w = x
-          ELSE
-            fn_val = zero
-            RETURN
-          END IF
-
-          r=ran1(idum)
-          IF (one-r <= w .AND. r > zero) THEN
-            IF (r*(w + one) >= one) CYCLE
-            IF (-LOG(r) <= w) CYCLE
-          END IF
-          EXIT
-        END DO
-
-        fn_val = x
-        RETURN
-    END FUNCTION random_gamma2
-END FUNCTION random_gamma
-
-!###############################################################################
-
-SUBROUTINE random_order(order,n,idum)
-    IMPLICIT NONE
-
-    !  (C) Copr. 1986-92 Numerical Recipes Software 6
-    !     Generate a random ordering of the integers 1 ... n.
-
-    INTEGER, INTENT(IN)  :: n
-    INTEGER, INTENT(OUT) :: order(n)
-    INTEGER :: idum
-    DOUBLE PRECISION ran1
-
-    !     Local variables
-
-    INTEGER :: i, j, k
-    double precision    :: wk
-
-    DO i = 1, n
-      order(i) = i
-    END DO
-
-    !     Starting at the end, swap the current last indicator with one
-    !     randomly chosen from those preceeding it.
-
-    DO i = n, 2, -1
-      wk=ran1(idum)
-      j = 1 + i * wk
-      IF (j < i) THEN
-        k = order(i)
-        order(i) = order(j)
-        order(j) = k
-      END IF
-    END DO
-
-    RETURN
-END SUBROUTINE random_order
-
-!###############################################################################
-
-FUNCTION gasdev(idum)
-    IMPLICIT NONE
-    !C USES ran1
-    !Returns a normally distributed deviate with zero mean and unit variance, using ran1(idum)
-    !as the source of uniform deviates.
-
-    INTEGER idum
-    DOUBLE PRECISION :: gasdev
-    INTEGER iset
-    DOUBLE PRECISION fac,gset,rsq,v1,v2,ran1
-    SAVE iset,gset
-    DATA iset/0/
-    rsq=0.
-    if (idum.lt.0) iset=0
-    if (iset.eq.0) then
-        do while (rsq.ge.1..or.rsq.eq.0.)
-            v1=2.*ran1(idum)-1.
-            v2=2.*ran1(idum)-1.
-            rsq=v1**2+v2**2
-        enddo
-        fac=sqrt(-2.*log(rsq)/rsq)
-        gset=v1*fac
-        gasdev=v2*fac
-        iset=1
-    else
-        gasdev=gset
-        iset=0
-    endif
-    return
-END
-
-!###############################################################################
-
-subroutine InitiateSeed
-    use Global
-    implicit none
-    integer :: edum
-    DOUBLE PRECISION :: W(1),GASDEV
-
-    open (unit=3,file="Seed.txt",status="old")
-
-    !READ AND WRITE SEED BACK TO FILE
-    READ (3,*) idum
-    W(1)=GASDEV(idum)
-    !Code to write new seed to file
-    IF (idum>=0) THEN
-        edum=(-1*idum)
-    ELSE
-        edum=idum
-    END IF
-    REWIND (3)
-    WRITE (3,*) edum
-    idum=edum
-end subroutine InitiateSeed
+    !###########################################################################
+end module
 
 !###############################################################################
 
 program AlphaBayes
-	use Global
-	implicit none
 
-    write(6,"(a)") ""
-    write(6,"(a30,a,a30)") " ","**********************"," "
-    write(6,"(a30,a,a30)") " ","*                    *"," "
-    write(6,"(a30,a,a30)") " ","*     AlphaBayes     *"," "
-    write(6,"(a30,a,a30)") " ","*                    *"," "
-    write(6,"(a30,a,a30)") " ","**********************"
-    write(6,"(a30,a,a30)") " ","VERSION:"//TOSTRING(VERS)," "
-    write(6,"(a)") ""
-    write(6,"(a35,a)")     " ","No Liability"
-    write(6,"(a25,a)")     " ","Bugs to John.Hickey@roslin.ed.ac.uk"
-    write(6,"(a)") ""
+  use ISO_Fortran_Env, STDIN=>input_unit,STDOUT=>output_unit,STDERR=>error_unit
+  use AlphaBayesModule
+  use IntelRNGMod
+  implicit none
 
-	call InitiateSeed
-	call ReadParam
-	call ReadData
-	if (trim(MarkerSolver)=="RidgeMCMC") call RidgeRegressionMCMC
-	if (trim(MarkerSolver)=="Ridge") call RidgeRegression
-	if (trim(MarkerSolver)=="BayesA") call BayesA
-	call MarkerEffectPostProcessing
-	call Prediction
-end program AlphaBayes
+  real(real32) :: Start,Finish
+
+  include "mkl_vml.f90"
+
+  call cpu_time(Start)
+
+  write(STDOUT,"(a)") ""
+  write(STDOUT,"(a30,a,a30)") " ","**********************"," "
+  write(STDOUT,"(a30,a,a30)") " ","*                    *"," "
+  write(STDOUT,"(a30,a,a30)") " ","*     AlphaBayes     *"," "
+  write(STDOUT,"(a30,a,a30)") " ","*                    *"," "
+  write(STDOUT,"(a30,a,a30)") " ","**********************"
+  write(STDOUT,"(a30,a,a30)") " ","VERSION:"//TOSTRING(VERS)," "
+  write(STDOUT,"(a)") ""
+  write(STDOUT,"(a35,a)")     " ","No Liability"
+  write(STDOUT,"(a25,a)")     " ","Bugs to John.Hickey@roslin.ed.ac.uk"
+  write(STDOUT,"(a)") ""
+
+  call IntitialiseIntelRNG
+
+  call ReadParam
+  call ReadData
+  if (trim(Method)=="RidgeMCMC") then
+    call RidgeRegressionMCMC
+  end if
+  if (trim(Method)=="Ridge") then
+    call RidgeRegression
+  end if
+  ! if (trim(Method)=="BayesA") then
+  !   ! call BayesA
+  ! end if
+  call Prediction
+
+  call UnintitialiseIntelRNG
+
+  call cpu_time(Finish)
+
+  write(STDOUT,"(a,f20.4,a)") "Time duration of AlphaBayes: ",Finish-Start," seconds"
+  write(STDOUT,"(a)") " "
+end program
 
 !###############################################################################

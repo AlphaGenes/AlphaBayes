@@ -40,18 +40,20 @@ else
 	MKLLIB := -L$(MKLROOT)/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -openmp -lpthread -lm
 	MKLINC := -I$(MKLROOT)/include
 	exe :=
-	FFLAGS:= $(FFLAGS) -mkl -static-intel -fpp -openmp-link=static  -module $(BUILDDIR) -D $(OSFLAG)
+	FFLAGS:= $(FFLAGS) -mkl -static-intel -fpp -openmp-link=static -module $(BUILDDIR) -D $(OSFLAG)
 	uname := $(shell uname)
 	MAKEDIR := @mkdir -p
 	DEL := rm -rf
-  	# Linux only
+  # Linux only
 	ifeq ($(uname), Linux)
 		FFLAGS := $(FFLAGS) -static -static-libgcc -static-libstdc++
 	endif
 endif
 
+MODS := ../AlphaHouse/IntelRNG/IntelRNGMod.f90 ../AlphaMate/src/AlphaSuiteMod.f90
+
 # Compile everything
-all: directories $(TARGETDIR)$(NAME)$(exe) $(TARGETDIR)AlphaBayes$(exe)
+all: directories $(TARGETDIR)$(NAME)$(exe)
 
 directories:
 	$(MAKEDIR) $(TARGETDIR)
@@ -77,10 +79,10 @@ web: all
 binary: FFLAGS := $(FFLAGS) -D "BINARY"
 
 binary: all
-# Compile AlphaBayes
-$(TARGETDIR)AlphaBayes$(exe): Makefile $(SRCDIR)AlphaBayes.f90
-	@echo "Compiling AlphaBayes..."
-	$(FC) $(SRCDIR)AlphaBayes.f90 $(FFLAGS) -o $(TARGETDIR)AlphaBayes$(exe)
+# Compile
+$(TARGETDIR)$(NAME)$(exe): Makefile $(MODS) $(SRCDIR)$(NAME).f90
+	@echo "Compiling $(NAME)..."
+	$(FC) $(MODS) $(SRCDIR)$(NAME).f90 $(FFLAGS) -o $(TARGETDIR)$(NAME)$(exe)
 	@echo
 
 # Cleaning
@@ -88,7 +90,7 @@ sparklinglyclean: veryclean
 	rm -rf TARGETDIR
 
 veryclean: clean
-	$(DEL) $(TARGETDIR)AlphaBayes$(exe)
+	$(DEL) $(TARGETDIR)$(NAME)$(exe)
 
 clean:
 	$(DEL) -rf $(BUILDDIR) *$(obj) *.mod *.dwarf *.i90 *__genmod* *~
