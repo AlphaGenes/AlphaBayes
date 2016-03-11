@@ -3,6 +3,7 @@ NAME:=AlphaBayes
 VERSION:= $(shell git rev-parse --short HEAD)
 SUBVERSION:=0
 PROGRAM:=$(NAME)$(VERSION).$(SUBVERSION)
+ALPHAHOUSEDIR:=../AlphaHouse/
 
 # Set the default compiler to iFort
 FC:=ifort
@@ -50,7 +51,9 @@ else
 	endif
 endif
 
-MODS := ../AlphaHouse/IntelRNG/IntelRNGMod.f90 ../AlphaMate/src/AlphaSuiteMod.f90
+MODS := $(ALPHAHOUSEDIR)AlphaHouseMod.f90 \
+	$(ALPHAHOUSEDIR)AlphaStatMod.f90 \
+	$(ALPHAHOUSEDIR)IntelRNG/IntelRNGMod.f90
 
 # Compile everything
 all: directories $(TARGETDIR)$(NAME)$(exe)
