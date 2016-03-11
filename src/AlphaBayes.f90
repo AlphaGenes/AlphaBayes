@@ -147,7 +147,7 @@ module AlphaBayesMod
         GenosTr(i,:)=SnpTmp(SnpPosition(:))
         read(UnitPhenoTr,*) IdTr(i),PhenoTr(i,1)
         if (trim(DumC) /= trim(IdTr(i))) then
-          write(STDERR,"(a)") "ERROR: Individual identifications in the genotype and phenotype files do not match"
+          write(STDERR,"(a)") "ERROR: Individual identifications in the genotype and phenotype files do not match in the training set"
           write(STDERR,"(a,i)") "ERROR: Line: ",i
           write(STDERR,"(a,a)") "ERROR: Genotype file identification: ",trim(DumC)
           write(STDERR,"(a,a)") "ERROR: Phenotype file identification: ",trim(IdTr(i))
@@ -587,6 +587,14 @@ module AlphaBayesMod
           read(UnitGenoTe,*) IdTe(i),SnpTmp(:)
           GenosTe(i,:)=SnpTmp(SnpPosition(:))
           read(UnitPhenoTe,*) DumC,PhenoTe(i,1)
+          if (trim(DumC) /= trim(IdTe(i))) then
+            write(STDERR,"(a,i)") "ERROR: Individual identifications in the genotype and phenotype files do not match in prediction set ",Pop
+            write(STDERR,"(a,i)") "ERROR: Line: ",i
+            write(STDERR,"(a,a)") "ERROR: Genotype file identification: ",trim(DumC)
+            write(STDERR,"(a,a)") "ERROR: Phenotype file identification: ",trim(IdTr(i))
+            write(STDERR,"(a)") " "
+            stop 1
+          end if
         end do
 
         do j=1,nSnp
