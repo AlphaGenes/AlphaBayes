@@ -37,7 +37,7 @@ module AlphaBayesMod
   integer(int32) :: nSnp,nSnpExternal,nAnisTr,nIter,nBurn,nProcessors,ScalingOpt,nTePop
   integer(int32),allocatable :: nAnisTe(:),FixedSnp(:),SnpPosition(:)
 
-  real(real64) :: MeanY,VarY,VarG,VarE,Mu,nAnisTrR,ExpVarX,SumExpVarX,ObsVarX,SumObsVarX
+  real(real64) :: MeanY,VarY,VarG,VarE,Mu,nSnpR,nAnisTrR,ExpVarX,SumExpVarX,ObsVarX,SumObsVarX
   real(real64),allocatable :: SnpTmp(:),AlleleFreq(:),ScaleCoef(:),GenosTr(:,:),PhenoTr(:,:),G(:,:)
 
   character(len=1000) :: GenoTrFile,PhenoTrFile,FileFixedSnp,Method
@@ -45,6 +45,11 @@ module AlphaBayesMod
   character(len=20),allocatable :: IdTr(:)
 
   REAL(REAL64),PARAMETER :: ONER=1.0d0,ZEROR=0.0d0
+
+  CHARACTER(LEN=100),PARAMETER :: SPECFILE="AlphaBayesSpec.txt"
+  CHARACTER(LEN=100),PARAMETER :: RESIDUALVARIANCEESTIMATEFILE="ResidualVarianceEstimate.txt"
+  CHARACTER(LEN=100),PARAMETER :: SNPVARIANCEESTIMATEFILE="SnpVarianceEstimate.txt"
+  CHARACTER(LEN=100),PARAMETER :: GENETICVARIANCEESTIMATEFILE="GeneticVarianceEstimate.txt"
 
   private
   public :: ReadParam,ReadData,Method,Prediction
@@ -61,7 +66,7 @@ module AlphaBayesMod
 
       character(len=100) :: DumC
 
-      open(newunit=UnitSpec,file="AlphaBayesSpec.txt",status="old")
+      open(newunit=UnitSpec,file=SPECFILE,status="old")
 
       read(UnitSpec,*) DumC,GenoTrFile
       read(UnitSpec,*) DumC,PhenoTrFile
@@ -89,6 +94,7 @@ module AlphaBayesMod
         allocate(FixedSnp(nSnpExternal))
         FixedSnp(:)=1
       end if
+      nSnpR=dble(nSnp)
 
       read(UnitSpec,*) DumC,nAnisTr
       nAnisTrR=dble(nAnisTr)
@@ -104,6 +110,11 @@ module AlphaBayesMod
       call OMP_SET_NUM_THREADS(nProcessors)
 
       read(UnitSpec,*) DumC,ScalingOpt
+      if (ScalingOpt<1 .or. ScalingOpt>5) then
+        write(STDERR,"(a)") "ERROR: ScalingOption must be between 1 and 5"
+        write(STDERR,"(a)") " "
+        stop 1
+      endif
 
       read(UnitSpec,*) DumC,Method
       close(UnitSpec)
@@ -156,8 +167,8 @@ module AlphaBayesMod
         end if
       end do
 
-      call CalcMean(PhenoTr(:,1),MeanY)
-      call CalcVar(PhenoTr(:,1),VarY,MeanY)
+      MeanY=CalcMean(PhenoTr(:,1))
+      VarY=CalcVar(PhenoTr(:,1),MeanY)
       PhenoTr(:,1)=(PhenoTr(:,1)-MeanY)/sqrt(VarY)
 
       SumExpVarX=0.0d0
@@ -188,7 +199,7 @@ module AlphaBayesMod
         end do
 
         ! Standardize
-        call CalcVar(GenosTr(:,j),TmpStat)
+        TmpStat=CalcVar(GenosTr(:,j))
         ExpVarX=2.0d0*(1.0d0-AlleleFreq(j))*AlleleFreq(j)+0.00001d0 ! if p=0.00001, then 2*p*q=0.00001
         SumExpVarX=SumExpVarX+ExpVarX
         ObsVarX=TmpStat+0.00001d0
@@ -198,43 +209,50 @@ module AlphaBayesMod
         GenosTr(:,j)=GenosTr(:,j)-(2.0d0*AlleleFreq(j))
 
         ! ... scale
-        if (ScalingOpt==1) then
-          ScaleCoef(j)=1.0d0
-        end if
+        ScaleCoef(j)=1.0d0
 
         if (ScalingOpt==2) then
           ! Scale by marker specific variance - expected
           ExpVarX=sqrt(ExpVarX)
-          GenosTr(:,j)=GenosTr(:,j)/ExpVarX
           ScaleCoef(j)=ExpVarX
+          GenosTr(:,j)=GenosTr(:,j)/ScaleCoef(j)
         end if
 
         if (ScalingOpt==3) then
           ! Scale by marker specific variance - observed
           ObsVarX=sqrt(ObsVarX)
-          GenosTr(:,j)=GenosTr(:,j)/ObsVarX
           ScaleCoef(j)=ObsVarX
+          GenosTr(:,j)=GenosTr(:,j)/ScaleCoef(j)
         end if
 
       end do
 
       if (ScalingOpt==4) then
         ! Scale by average marker variance - expected
-        ExpVarX=sqrt(SumExpVarX/dble(nSnp))
-        GenosTr(:,:)=GenosTr(:,:)/ExpVarX
+        ExpVarX=sqrt(SumExpVarX/nSnpR)
         ScaleCoef(:)=ExpVarX
+        GenosTr(:,:)=GenosTr(:,:)/ScaleCoef(1)
       end if
 
       if (ScalingOpt==5) then
         ! Scale by average marker variance - observed
-        ObsVarX=sqrt(SumObsVarX/dble(nSnp))
-        GenosTr(:,:)=GenosTr(:,:)/ObsVarX
+        ObsVarX=sqrt(SumObsVarX/nSnpR)
         ScaleCoef(:)=ObsVarX
+        GenosTr(:,:)=GenosTr(:,:)/ScaleCoef(1)
       end if
 
       close(UnitGenoTr)
       close(UnitPhenoTr)
       !close(UnitAlleleFreq)
+
+      ! open(newunit=UnitGenoTr,file="GenoTrainProcessed.txt",status="unknown")
+      ! open(newunit=UnitPhenoTr,file="PhenoTrainProcessed.txt",status="unknown")
+      ! do i=1,nAnisTr
+      !   write(UnitGenoTr,"("//Int2Char(nSnp)//"(1x,f20.16))") GenosTr(i,:)
+      !   write(UnitPhenoTr,*) PhenoTr(i,1)
+      ! end do
+      ! close(UnitGenoTr)
+      ! close(UnitPhenoTr)
     end subroutine
 
     !###########################################################################
@@ -242,59 +260,68 @@ module AlphaBayesMod
     subroutine RidgeRegression
       implicit none
 
-      integer(int32) :: Iter,j,SnpId,RandomOrdering(nSnp)
+      integer(int32) :: Iter,j,Snp,RandomOrdering(nSnp)
 
-      real(real64) :: ddot,Eps,Rhs,Lhs,SolOld,LambdaSnp
-      real(real64),allocatable :: XpX(:,:),Xg(:,:),E(:,:)
+      real(real64) :: ddot,VarS,Rhs,Lhs,Sol,Diff,Eps
+      real(real64),allocatable :: XpXTauE(:,:),Xg(:,:),E(:,:)
 
-      allocate(XpX(nSnp,1))
+      allocate(XpXTauE(nSnp,1))
       allocate(Xg(nAnisTr,1))
       allocate(E(nAnisTr,1))
-
-      Mu=0.0d0
-      G=0.000001d0
-
-      ! Construct XpX and Lambda
-      do j=1,nSnp
-        XpX(j,1)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + 0.000000000000001d0
-      end do
-
-      LambdaSnp=VarE/(VarG/dble(nSnp))
 
       ! Working phenotypes
       E(:,1)=PhenoTr(:,1)
 
+      ! Initialise
+      Mu=0.0d0
+      G=0.0d0
+
+      ! Construct XpXTauE
+      do j=1,nSnp
+        XpXTauE(j,1)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + tiny(GenosTr(1,1))
+      end do
+      XpXTauE(:,1)=XpXTauE(:,1)/VarE ! can do it only once for all rounds!!!
+      VarS=VarG/nSnpR
+
+      ! Iterate
       do Iter=1,nIter
+        Eps=0.0d0
+
         ! Intercept
-        E(:,1)=E(:,1)+Mu
-        Mu=sum(E(:,1))/nAnisTrR
-        E(:,1)=E(:,1)-Mu
+        Lhs=nAnisTrR/VarE
+        Rhs=sum(E(:,1))/VarE + nAnisTrR*Mu/VarE
+        Sol=Rhs/Lhs
+        Diff=Sol-Mu
+        E(:,1)=E(:,1)-Diff
+        Mu=Sol
+        Eps=Eps+Diff*Diff
 
         ! Snp effects
-        eps=0.0d0
-        call RandomOrder(RandomOrdering,nSnp)
+        RandomOrdering=RandomOrder(nSnp)
         do j=1,nSnp
-          SnpId=RandomOrdering(j)
-          E(:,1)=E(:,1)+(GenosTr(:,SnpId)*G(SnpId,1))
-          Lhs=XpX(SnpId,1)+LambdaSnp
-          Rhs=ddot(nAnisTr,GenosTr(:,SnpId),1,E(:,1),1)
-          SolOld=G(SnpId,1)
-          G(SnpId,1)=Rhs/Lhs
-          E(:,1)=E(:,1)-(GenosTr(:,SnpId)*G(SnpId,1))
-          Eps=Eps+(G(SnpId,1)-SolOld)**2
+          Snp=RandomOrdering(j)
+          Lhs=XpXTauE(Snp,1) + 1.0d0/VarS
+          Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E(:,1),1)/VarE + XpXTauE(Snp,1)*G(Snp,1)
+          Sol=Rhs/Lhs
+          Diff=Sol-G(Snp,1)
+          E(:,1)=E(:,1)-(GenosTr(:,Snp)*Diff)
+          G(Snp,1)=Sol
+          Eps=Eps+Diff*Diff
         end do
 
+        ! Recompute residuals to avoid rounding errors
         if (mod(Iter,200)==0) then
           call dgemm("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Xg,nAnisTr)
-          E(:,1)=PhenoTr(:,1)-Xg(:,1)-Mu
+          E(:,1)=PhenoTr(:,1)-Mu-Xg(:,1)
         end if
 
-        if (eps < 1e-8) then
+        ! Stopping criteria
+        if (eps < 1.0E-8) then
           exit
         end if
       end do
 
-      deallocate(XpX)
+      deallocate(XpXTauE)
       deallocate(Xg)
       deallocate(E)
     end subroutine
@@ -304,12 +331,12 @@ module AlphaBayesMod
     subroutine RidgeRegressionMCMC
       implicit none
 
-      integer(int32) :: i,Iter,j,SnpId,RandomOrdering(nSnp),UnitVar
+      integer(int32) :: Iter,j,Snp,RandomOrdering(nSnp),UnitVar
 
-      real(real64) :: ddot,Rhs,Lhs,LambdaSnp,nSampR,VarESamp,VarGSamp,VarGAccum,VarEAccum
-      real(real64) :: R2,EDF0,EDF2,GDF0,GDF2,ES0,GS0,MSX,EpE,GpG
+      real(real64) :: TmpR,ddot,Rhs,Lhs,Sol,Diff,nSampR,VarESamp,VarEAccum,VarGSamp,VarGAccum
+      real(real64) :: R2,EDF0,EDF,GDF0,GDF,ES0,GS0,MSX,EpE,GpG
       real(real64),allocatable :: GAccum(:,:),SX2(:),MX2(:),XpX(:,:),Xg(:,:),E(:,:)
-      real(real64),allocatable :: GaussDev(:),GammaDevE(:),GammaDevG(:)
+      real(real64),allocatable :: GaussDevMu(:),GaussDevSnp(:),GammaDevE(:),GammaDevG(:)
 
       allocate(XpX(nSnp,1))
       allocate(Xg(nAnisTr,1))
@@ -317,12 +344,17 @@ module AlphaBayesMod
       allocate(GAccum(nSnp,1))
       allocate(SX2(nSnp))
       allocate(MX2(nSnp))
-      allocate(GaussDev(nSnp))
+      allocate(GaussDevMu(nIter))
+      allocate(GaussDevSnp(nSnp))
       allocate(GammaDevE(nIter))
       allocate(GammaDevG(nIter))
 
+      ! Working phenotypes
+      E(:,1)=PhenoTr(:,1)
+
+      ! Initialise
       Mu=0.0d0
-      G=0.1d0
+      G=0.0d0
       GAccum=0.0d0
       VarGAccum=0.0d0
       VarEAccum=0.0d0
@@ -330,86 +362,110 @@ module AlphaBayesMod
       ! These prior parameters are modelled as in BGLR
       R2=0.5d0
 
+      TmpR=CalcVar(E(:,1)) ! should be 1 if Phen is standardized
+      VarESamp=TmpR*(1.0d0-R2)
       EDF0=5.0d0
-      EDF2=(dble(nAnisTr)+EDF0)/2.0d0
-      ES0=(VarY*(1.0d0-R2))*(EDF0+2.0d0)
+      EDF=nAnisTrR+EDF0
+      ES0=VarESamp*(EDF0+2.0d0)
 
       GDF0=5.0d0
-      GDF2=(dble(nSnp)+GDF0)/2.0d0
+      GDF=nSnpR+GDF0
       SX2(:)=0.0d0
       MX2(:)=0.0d0
-      do i=1,nSnp
-        SX2(i)=sum(GenosTr(:,i)*GenosTr(:,i))
-        MX2(i)=sum(GenosTr(:,i))/nAnisTrR
-        MX2(i)=MX2(i)*MX2(i)
+      do j=1,nSnp
+        SX2(j)=sum(GenosTr(:,j)*GenosTr(:,j))
+        MX2(j)=CalcMean(GenosTr(:,j))
+        MX2(j)=MX2(j)*MX2(j)
       end do
       MSX=sum(SX2)/nAnisTrR-sum(MX2)
-      GS0=((VarY*R2)/MSX)*(GDF0+2.0d0)
+      VarGSamp=TmpR*R2/MSX
+      GS0=VarGSamp*(GDF0+2.0d0)
+
+      ! print*,"EDF",EDF
+      ! print*,"VarESamp",VarESamp
+      ! print*,"ES0",ES0
+      ! print*," "
+      ! print*,"sumMeanXSq",sum(MX2)
+      ! print*,"MSX",MSX
+      ! print*," "
+      ! print*,"GDF",GDF
+      ! print*,"VarGSamp",VarGSamp
+      ! print*,"GS0",GS0
 
       deallocate(SX2)
       deallocate(MX2)
 
       ! Construct XpX
       do j=1,nSnp
-        XpX(j,1)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + 0.000000000000001d0
+        XpX(j,1)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + tiny(GenosTr(1,1))
       end do
 
-      ! Working phenotypes
-      E(:,1)=PhenoTr(:,1)
+      ! Gauss and Gamma deviates
+      GaussDevMu(:)=SampleIntelGaussD(n=nIter)
+      GammaDevE(:)=SampleIntelGammaD(n=nIter,alpha=EDF/2.0d0,beta=2.0d0)
+      GammaDevG(:)=SampleIntelGammaD(n=nIter,alpha=GDF/2.0d0,beta=2.0d0)
 
-      ! Gamma deviates
-      GammaDevE(:)=SampleIntelGammaD(n=nIter,alpha=EDF2,beta=2.0d0)
-      GammaDevG(:)=SampleIntelGammaD(n=nIter,alpha=GDF2,beta=2.0d0)
-
+      ! Iterate
       nSampR=dble(nIter-nBurn)
       do Iter=1,nIter
-        ! Residual variance
-        EpE=ddot(nAnisTr,E(:,1),1,E(:,1),1) + ES0 + 0.000000000000001d0
-        VarESamp=EpE/GammaDevE(Iter)
-
-        ! Snp variance
-        GpG=ddot(nSnp,G(:,1),1,G(:,1),1) + GS0 + 0.000000000000001d0
-        VarGSamp=GpG/GammaDevG(Iter)
-
-        ! Ratio of variances
-        LambdaSnp=VarESamp/VarGSamp
-
         ! Intercept
-        E(:,1)=E(:,1)+Mu
-        Mu=sum(E(:,1))/nAnisTrR
-        E(:,1)=E(:,1)-Mu
+        Lhs=nAnisTrR/VarESamp
+        Rhs=sum(E(:,1))/VarESamp + nAnisTrR*Mu/VarESamp
+        Sol=Rhs/Lhs + GaussDevMu(Iter)/sqrt(Lhs)
+        Diff=Sol-Mu
+        E(:,1)=E(:,1)-Diff
+        Mu=Sol
 
         ! Snp effects
-        call RandomOrder(RandomOrdering,nSnp)
-        GaussDev(:)=SampleIntelGaussD(n=nSnp)
+        RandomOrdering=RandomOrder(nSnp)
+        GaussDevSnp(:)=SampleIntelGaussD(n=nSnp)
         do j=1,nSnp
-          SnpId=RandomOrdering(j)
-          E(:,1)=E(:,1)+(GenosTr(:,SnpId)*G(SnpId,1))
-          Lhs=XpX(SnpId,1)+LambdaSnp
-          Rhs=ddot(nAnisTr,GenosTr(:,SnpId),1,E(:,1),1)
-          G(SnpId,1)=(Rhs/Lhs)+(GaussDev(SnpId)/sqrt(Lhs))
-          E(:,1)=E(:,1)-(GenosTr(:,SnpId)*G(SnpId,1))
+          Snp=RandomOrdering(j)
+          ! This does not work, and I can not see why
+          !Lhs=XpX(Snp,1) + VarESamp/VarGSamp
+          !Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E(:,1),1) + XpX(Snp,1)*G(Snp,1)
+          Lhs=XpX(Snp,1)/VarESamp + 1.0d0/VarGSamp
+          Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E(:,1),1)/VarESamp + XpX(Snp,1)*G(Snp,1)/VarESamp
+          Sol=Rhs/Lhs + GaussDevSnp(j)/sqrt(Lhs)
+          Diff=Sol-G(Snp,1)
+          E(:,1)=E(:,1)-(GenosTr(:,Snp)*Diff)
+          G(Snp,1)=Sol
         end do
+
+        ! Snp variance
+        GpG=ddot(nSnp,G(:,1),1,G(:,1),1)+GS0
+        VarGSamp=GpG/GammaDevG(Iter)
+        !write(STDOUT,"(6f20.10)") GpG,GpG-GS0,GS0,VarGSamp,GammaDevG(Iter)
+
+        ! Recompute residuals to avoid rounding errors
+        if (mod(Iter,200)==0) then
+          call dgemm("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Xg,nAnisTr)
+          E(:,1)=PhenoTr(:,1)-Mu-Xg(:,1)
+        end if
+
+        ! Residual variance
+        EpE=ddot(nAnisTr,E(:,1),1,E(:,1),1)+ES0
+        VarESamp=EpE/GammaDevE(Iter)
+        !write(STDOUT,"(6f20.10)") EpE,EpE-ES0,ES0,VarESamp,GammaDevE(Iter)
+
+        ! Posterior means
         if (Iter>nBurn) then
           GAccum=GAccum+G/nSampR
           VarGAccum=VarGAccum+VarGSamp/nSampR
           VarEAccum=VarEAccum+VarESamp/nSampR
         end if
-
-        ! Recompute residuals to avoid rounding errors
-        if (mod(Iter,200)==0) then
-          call dgemm("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Xg,nAnisTr)
-          E(:,1)=PhenoTr(:,1)-Xg(:,1)-Mu
-        end if
-
       end do
 
       G=GAccum
-      open(newunit=UnitVar,file="ResidualVarianceEstimate.txt",status="unknown")
-      write(UnitVar,"(f20.10)") VarEAccum
+
+      open(newunit=UnitVar,file=RESIDUALVARIANCEESTIMATEFILE,status="unknown")
+      write(UnitVar,"(f20.10)") VarEAccum*VarY
       close(UnitVar)
-      open(newunit=UnitVar,file="SnpVarianceEstimate.txt",status="unknown")
-      write(UnitVar,"(f20.10)") VarGAccum
+      open(newunit=UnitVar,file=SNPVARIANCEESTIMATEFILE,status="unknown")
+      write(UnitVar,"(f20.10)") VarGAccum*VarY
+      close(UnitVar)
+      open(newunit=UnitVar,file=GENETICVARIANCEESTIMATEFILE,status="unknown")
+      write(UnitVar,"(f20.10)") VarGAccum*2*sum(AlleleFreq(:)*(1-AlleleFreq(:)))*VarY
       close(UnitVar)
 
       deallocate(XpX)
@@ -529,7 +585,7 @@ module AlphaBayesMod
 
       open(newunit=UnitEbv,file="PredictionsForSetTrain.txt",status="unknown")
       call dgemm("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Ebv,nAnisTr)
-      PhenoTr(:,1)=PhenoTr(:,1)*sqrt(VarY)+MeanY
+      PhenoTr(:,1)=MeanY+PhenoTr(:,1)*sqrt(VarY)
       write(UnitEbv,"(a20,2(1x,a20))") "Id","Observed","Estimate"
       do i=1,nAnisTr
         write(UnitEbv,"(a20,2(1x,f20.10))") IdTr(i),PhenoTr(i,1),Ebv(i,1)
@@ -537,7 +593,7 @@ module AlphaBayesMod
       flush(UnitEbv)
       close(UnitEbv)
 
-      call CalcCorrelation(PhenoTr(:,1),Ebv(:,1),Cor)
+      Cor=CalcCorrelation(PhenoTr(:,1),Ebv(:,1))
       DumC="Train"
       write(UnitSum,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cor%Cor,Cor%Cov/Cor%Var2,Cor%Cov/Cor%Var1,Cor%Cov,Cor%Var1,Cor%Var2
 
@@ -550,12 +606,12 @@ module AlphaBayesMod
       ! y     = mu     + b*z     + e
       ! y/SDY = mu/SDY + b*z/SDY + e/SDY
       ! y'    = mu'    + b'*z    + e'
-      ! b'*z=b /SDY*z
-      ! b*z =b'*SDY*z
-      ! b*x/SDX =b'*SDY*x/SDX
-      ! b=b'*SDY/SDX
+      ! b'*z=b*z/SDY
+      ! b*z =b'*z*SDY
+      ! b*x/SDX=b'*x/SDX*SDY
+      ! b=b'/SDX*SDY
 
-      G(:,1)=G(:,1)*sqrt(VarY)/ScaleCoef(:)
+      G(:,1)=G(:,1)/ScaleCoef(:)*sqrt(VarY)
 
       ! Output
       open(newunit=UnitSnpSol,file="SnpEstimates.txt",status="unknown")
@@ -627,10 +683,18 @@ module AlphaBayesMod
         flush(UnitEbv)
         close(UnitEbv)
 
-        call CalcCorrelation(PhenoTe(1:nAnisTe(Pop),1),Ebv(1:nAnisTe(Pop),1),Cor)
+        Cor=CalcCorrelation(PhenoTe(1:nAnisTe(Pop),1),Ebv(1:nAnisTe(Pop),1))
         DumC="Predict"//Int2Char(Pop)
         write(UnitSum,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cor%Cor,Cor%Cov/Cor%Var2,Cor%Cov/Cor%Var1,Cor%Cov,Cor%Var1,Cor%Var2
 
+        ! open(newunit=UnitGenoTe,file="GenoTest"//Int2Char(Pop)//"Processed.txt",status="unknown")
+        ! open(newunit=UnitPhenoTe,file="PhenoTest"//Int2Char(Pop)//"Processed.txt",status="unknown")
+        ! do i=1,nAnisTe(Pop)
+        !   write(UnitGenoTe,"("//Int2Char(nSnp)//"(1x,f20.16))") GenosTe(i,:)
+        !   write(UnitPhenoTe,*) PhenoTe(i,1)
+        ! end do
+        ! close(UnitGenoTe)
+        ! close(UnitPhenoTe)
       end do
 
       deallocate(IdTe)
