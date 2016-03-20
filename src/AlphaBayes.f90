@@ -53,7 +53,7 @@ module AlphaBayesMod
 
   private
   public :: ReadParam,ReadData,Method,Prediction
-  public :: RidgeRegression,RidgeRegressionMCMC!,BayesA
+  public :: RidgeRegression,RidgeRegressionMCMC,BayesA
 
   contains
 
@@ -294,7 +294,7 @@ module AlphaBayesMod
         Diff=Sol-Mu
         E(:,1)=E(:,1)-Diff
         Mu=Sol
-        Eps=Eps+Diff*Diff
+        Eps=Eps + Diff*Diff
 
         ! Snp effects
         RandomOrdering=RandomOrder(nSnp)
@@ -304,9 +304,9 @@ module AlphaBayesMod
           Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E(:,1),1)/VarE + XpXTauE(Snp,1)*G(Snp,1)
           Sol=Rhs/Lhs
           Diff=Sol-G(Snp,1)
-          E(:,1)=E(:,1)-(GenosTr(:,Snp)*Diff)
+          E(:,1)=E(:,1) - GenosTr(:,Snp)*Diff
           G(Snp,1)=Sol
-          Eps=Eps+Diff*Diff
+          Eps=Eps + Diff*Diff
         end do
 
         ! Recompute residuals to avoid rounding errors
@@ -381,17 +381,6 @@ module AlphaBayesMod
       VarGSamp=TmpR*R2/MSX
       GS0=VarGSamp*(GDF0+2.0d0)
 
-      ! print*,"EDF",EDF
-      ! print*,"VarESamp",VarESamp
-      ! print*,"ES0",ES0
-      ! print*," "
-      ! print*,"sumMeanXSq",sum(MX2)
-      ! print*,"MSX",MSX
-      ! print*," "
-      ! print*,"GDF",GDF
-      ! print*,"VarGSamp",VarGSamp
-      ! print*,"GS0",GS0
-
       deallocate(SX2)
       deallocate(MX2)
 
@@ -402,8 +391,8 @@ module AlphaBayesMod
 
       ! Gauss and Gamma deviates
       GaussDevMu(:)=SampleIntelGaussD(n=nIter)
-      GammaDevE(:)=SampleIntelGammaD(n=nIter,alpha=EDF/2.0d0,beta=2.0d0)
-      GammaDevG(:)=SampleIntelGammaD(n=nIter,alpha=GDF/2.0d0,beta=2.0d0)
+      GammaDevE(:)=SampleIntelGammaD(n=nIter,shape=EDF/2.0d0,scale=2.0d0)
+      GammaDevG(:)=SampleIntelGammaD(n=nIter,shape=GDF/2.0d0,scale=2.0d0)
 
       ! Iterate
       nSampR=dble(nIter-nBurn)
@@ -421,21 +410,20 @@ module AlphaBayesMod
         GaussDevSnp(:)=SampleIntelGaussD(n=nSnp)
         do j=1,nSnp
           Snp=RandomOrdering(j)
-          ! This does not work, and I can not see why
+          ! This does not work (got too big variances!), and I can not see why
           !Lhs=XpX(Snp,1) + VarESamp/VarGSamp
           !Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E(:,1),1) + XpX(Snp,1)*G(Snp,1)
           Lhs=XpX(Snp,1)/VarESamp + 1.0d0/VarGSamp
           Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E(:,1),1)/VarESamp + XpX(Snp,1)*G(Snp,1)/VarESamp
           Sol=Rhs/Lhs + GaussDevSnp(j)/sqrt(Lhs)
           Diff=Sol-G(Snp,1)
-          E(:,1)=E(:,1)-(GenosTr(:,Snp)*Diff)
+          E(:,1)=E(:,1) - GenosTr(:,Snp)*Diff
           G(Snp,1)=Sol
         end do
 
         ! Snp variance
         GpG=ddot(nSnp,G(:,1),1,G(:,1),1)+GS0
         VarGSamp=GpG/GammaDevG(Iter)
-        !write(STDOUT,"(6f20.10)") GpG,GpG-GS0,GS0,VarGSamp,GammaDevG(Iter)
 
         ! Recompute residuals to avoid rounding errors
         if (mod(Iter,200)==0) then
@@ -446,7 +434,6 @@ module AlphaBayesMod
         ! Residual variance
         EpE=ddot(nAnisTr,E(:,1),1,E(:,1),1)+ES0
         VarESamp=EpE/GammaDevE(Iter)
-        !write(STDOUT,"(6f20.10)") EpE,EpE-ES0,ES0,VarESamp,GammaDevE(Iter)
 
         ! Posterior means
         if (Iter>nBurn) then
@@ -479,88 +466,146 @@ module AlphaBayesMod
     subroutine BayesA
       implicit none
 
-      integer(int32) :: Iter,j,SnpId,RandomOrdering(nSnp)
+      integer(int32) :: Iter,j,Snp,RandomOrdering(nSnp),UnitVar
 
-      real(real64) :: ddot,Rhs,Lhs,LambdaSnp,EpE,nSampR,VarESamp
-      real(real64),allocatable :: GAccum(:,:),VarGSamp(:,:),XpX(:,:),Xg(:,:),E(:,:)
-      real(real64) :: vdf,ShapeCoefficient,ScaleCoefficient,sc,gampe1,gampe2
-      real(real64),allocatable :: GaussDev(:),GammaDevE(:),GammaDevG(:)
+      real(real64) :: TmpR,ddot,daxpy,Rhs,Lhs,Sol,Diff,nSampR,VarESamp,VarEAccum
+      real(real64) :: R2,EDF0,EDF,GDF0,GDF,ES0,GS0,MSX,EpE,Shape0,Rate0,GS(1),GSDF
+      real(real64),allocatable :: GAccum(:,:),SX2(:),MX2(:),XpX(:,:),Xg(:,:),E(:,:)
+      real(real64),allocatable :: GpG(:),VarGSamp(:),VarGAccum(:)
+      real(real64),allocatable :: GaussDevMu(:),GaussDevSnp(:),GammaDevE(:),GammaDevG(:)
 
       allocate(XpX(nSnp,1))
       allocate(Xg(nAnisTr,1))
       allocate(E(nAnisTr,1))
-      allocate(VarGSamp(nSnp,1))
       allocate(GAccum(nSnp,1))
-      allocate(GaussDev(nSnp))
+      allocate(SX2(nSnp))
+      allocate(MX2(nSnp))
+      allocate(GpG(nSnp))
+      allocate(VarGSamp(nSnp))
+      allocate(VarGAccum(nSnp))
+      allocate(GaussDevMu(nIter))
+      allocate(GaussDevSnp(nSnp))
       allocate(GammaDevE(nIter))
-      allocate(GammaDevG(nSnp))
-
-      Mu=0.0d0
-      G=0.1d0
-      GAccum=0.0d0
-
-      ! TODO: model the prior parameters as in BGLR
-      vdf=4.012d0
-      ShapeCoefficient=(vdf/2.0d0) !Ben
-      ScaleCoefficient=((vdf-2.0d0)*VarG)/SumExpVarX
-      sc=2.0d0
-      gampe1=(dble(nAnisTr)/2.0d0)-2.0d0
-      gampe2=2.0d0
-
-      ! Construct XpX
-      do j=1,nSnp
-          XpX(j,1)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + 0.000000000000001d0
-      end do
+      allocate(GammaDevG(nIter))
 
       ! Working phenotypes
       E(:,1)=PhenoTr(:,1)
 
+      ! Initialise
+      Mu=0.0d0
+      G=0.0d0
+      GAccum=0.0d0
+      VarGAccum=0.0d0
+      VarEAccum=0.0d0
+
+      ! These prior parameters are modelled as in BGLR
+      R2=0.5d0
+
+      TmpR=CalcVar(E(:,1)) ! should be 1 if Phen is standardized
+      VarESamp=TmpR*(1.0d0-R2)
+      EDF0=5.0d0
+      EDF=nAnisTrR+EDF0
+      ES0=VarESamp*(EDF0+2.0d0)
+
+      GDF0=5.0d0
+      GDF=1.0d0+GDF0
+      SX2(:)=0.0d0
+      MX2(:)=0.0d0
+      do j=1,nSnp
+        SX2(j)=sum(GenosTr(:,j)*GenosTr(:,j))
+        MX2(j)=CalcMean(GenosTr(:,j))
+        MX2(j)=MX2(j)*MX2(j)
+      end do
+      MSX=sum(SX2)/nAnisTrR-sum(MX2)
+      VarGSamp(:)=TmpR*R2/MSX
+      GS0=VarGSamp(1)*(GDF0+2.0d0)
+
+      Shape0=1.1d0
+      Rate0=(Shape0-1.0d0)/GS0
+      GS=GS0
+      GSDF=nSnpR*GDF0/2.0d0 + Shape0
+
+      deallocate(SX2)
+      deallocate(MX2)
+
+      ! Construct XpX
+      do j=1,nSnp
+        XpX(j,1)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + tiny(GenosTr(1,1))
+      end do
+
+      ! Gauss and Gamma deviates
+      GaussDevMu(:)=SampleIntelGaussD(n=nIter)
+      GammaDevE(:)=SampleIntelGammaD(n=nIter,shape=EDF/2.0d0,scale=2.0d0)
+
+      ! Iterate
       nSampR=dble(nIter-nBurn)
-      GammaDevE(:)=SampleIntelGammaD(n=nIter,alpha=gampe1,beta=gampe2)
       do Iter=1,nIter
-        ! Residual variance
-        EpE=ddot(nAnisTr,E(:,1),1,E(:,1),1) + 0.000000000000001d0
-        VarESamp=EpE/GammaDevE(Iter)
+        ! Intercept
+        Lhs=nAnisTrR/VarESamp
+        Rhs=sum(E(:,1))/VarESamp + nAnisTrR*Mu/VarESamp
+        Sol=Rhs/Lhs + GaussDevMu(Iter)/sqrt(Lhs)
+        Diff=Sol-Mu
+        E(:,1)=E(:,1)-Diff
+        Mu=Sol
 
-        ! Snp variances
-        GammaDevG(:)=SampleIntelGammaD(n=nSnp,alpha=ShapeCoefficient,beta=sc)
-        VarGSamp(:,1)=(ScaleCoefficient+(G(:,1)*G(:,1)))/GammaDevG(:)
-
-        !Intercept
-        E(:,1)=E(:,1)+Mu
-        Mu=sum(E(:,1))/nAnisTrR
-        E(:,1)=E(:,1)-Mu
-
-        !Snp effects
-        call RandomOrder(RandomOrdering,nSnp)
-        GaussDev(:)=SampleIntelGaussD(n=nSnp)
+        ! Snp effects
+        RandomOrdering=RandomOrder(nSnp)
+        GaussDevSnp(:)=SampleIntelGaussD(n=nSnp)
         do j=1,nSnp
-          SnpId=RandomOrdering(j)
-          E(:,1)=E(:,1)+(GenosTr(:,SnpId)*G(SnpId,1))
-          LambdaSnp=VarESamp/VarGSamp(SnpId,1)
-          Lhs=XpX(SnpId,1)+LambdaSnp
-          Rhs=ddot(nAnisTr,GenosTr(:,SnpId),1,E(:,1),1)
-          G(SnpId,1)=(Rhs/Lhs)+(GaussDev(SnpId)/sqrt(Lhs))
-          E(:,1)=E(:,1)-(GenosTr(:,SnpId)*G(SnpId,1))
+          Snp=RandomOrdering(j)
+          Lhs=XpX(Snp,1)/VarESamp + 1.0d0/VarGSamp(Snp)
+          Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E(:,1),1)/VarESamp + XpX(Snp,1)*G(Snp,1)/VarESamp
+          Sol=Rhs/Lhs + GaussDevSnp(j)/sqrt(Lhs)
+          Diff=Sol-G(Snp,1)
+          E(:,1)=E(:,1) - GenosTr(:,Snp)*Diff
+          G(Snp,1)=Sol
         end do
-        if (Iter>nBurn) then
-          GAccum=GAccum+G/nSampR
-        end if
+
+        ! Snp variance
+        GpG(:)=G(:,1)*G(:,1) + GS(1)
+        GammaDevG(:)=SampleIntelGammaD(n=nSnp,shape=GDF/2.0d0,scale=2.0d0)
+        VarGSamp(:)=GpG(:)/GammaDevG(:)
+        TmpR=sum(1.0d0/VarGSamp(:))/2.0d0 + Rate0
+        GS=SampleIntelGammaD(n=1,shape=GSDF/2.0d0,rate=TmpR)
+        ! TODO: Can we sample gamma deviates in advance and then use GSDF to get GS?
 
         ! Recompute residuals to avoid rounding errors
         if (mod(Iter,200)==0) then
-          call dgemm('n','n',nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Xg,nAnisTr)
-          E(:,1)=PhenoTr(:,1)-Xg(:,1)-Mu
+          call dgemm("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Xg,nAnisTr)
+          E(:,1)=PhenoTr(:,1)-Mu-Xg(:,1)
         end if
 
+        ! Residual variance
+        EpE=ddot(nAnisTr,E(:,1),1,E(:,1),1)+ES0
+        VarESamp=EpE/GammaDevE(Iter)
+
+        ! Posterior means
+        if (Iter>nBurn) then
+          GAccum=GAccum+G/nSampR
+          VarGAccum=VarGAccum+VarGSamp/nSampR
+          VarEAccum=VarEAccum+VarESamp/nSampR
+        end if
       end do
 
       G=GAccum
 
+      open(newunit=UnitVar,file=RESIDUALVARIANCEESTIMATEFILE,status="unknown")
+      write(UnitVar,"(f20.10)") VarEAccum*VarY
+      close(UnitVar)
+      open(newunit=UnitVar,file=SNPVARIANCEESTIMATEFILE,status="unknown")
+      do j=1,nSnp
+        write(UnitVar,"(f20.10)") VarGAccum(j)*VarY
+      end do
+      close(UnitVar)
+      open(newunit=UnitVar,file=GENETICVARIANCEESTIMATEFILE,status="unknown")
+      do j=1,nSnp
+        write(UnitVar,"(f20.10)") VarGAccum(j)*2*AlleleFreq(j)*(1-AlleleFreq(j))*VarY
+      end do
+      close(UnitVar)
+
       deallocate(XpX)
       deallocate(Xg)
       deallocate(E)
-      deallocate(VarGSamp)
       deallocate(GAccum)
     end subroutine
 
@@ -740,14 +785,14 @@ program AlphaBayes
 
   call ReadParam
   call ReadData
-  if (trim(Method)=="RidgeMCMC") then
-    call RidgeRegressionMCMC
-  end if
   if (trim(Method)=="Ridge") then
     call RidgeRegression
   end if
+  if (trim(Method)=="RidgeMCMC") then
+    call RidgeRegressionMCMC
+  end if
   ! if (trim(Method)=="BayesA") then
-  !   ! call BayesA
+  !   call BayesA
   ! end if
   call Prediction
 
