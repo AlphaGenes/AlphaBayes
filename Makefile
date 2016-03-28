@@ -38,10 +38,10 @@ else
 	# MKLROOT:=/exports/applications/apps/intel/ClusterStudio2013/mkl
 	# On Eddie3
 	# MKLROOT := /exports/applications/apps/SL7/intel/parallel_studio_xe_2016/mkl
-	MKLLIB := -L$(MKLROOT)/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -openmp -lpthread -lm
+	MKLLIB := -L$(MKLROOT)/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lpthread -lm
 	MKLINC := -I$(MKLROOT)/include
 	exe :=
-	FFLAGS:= $(FFLAGS) -mkl -static-intel -fpp -openmp-link=static -module $(BUILDDIR) -D $(OSFLAG)
+	FFLAGS:= $(FFLAGS) -fpp -mkl -openmp -static-intel -openmp-link=static -module $(BUILDDIR) -D $(OSFLAG) $(MKLINC) $(MKLLIB)
 	uname := $(shell uname)
 	MAKEDIR := @mkdir -p
 	DEL := rm -rf
@@ -82,6 +82,7 @@ web: all
 binary: FFLAGS := $(FFLAGS) -D "BINARY"
 
 binary: all
+
 # Compile
 $(TARGETDIR)$(NAME)$(exe): Makefile $(MODS) $(SRCDIR)$(NAME).f90
 	@echo "Compiling $(NAME)..."
