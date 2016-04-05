@@ -9,7 +9,7 @@ ALPHAHOUSEDIR:=../AlphaHouse/
 FC:=ifort
 FFLAGS:=-O3 -DVERS=""commit-$(VERSION)""
 
-#  If -D WEB is specified, stops will be put into AlphaBayes.
+# If -D WEB is specified, stops will be put into the binary
 
 # MS Windows
 ifeq ($(OS), Windows_NT)
@@ -17,8 +17,12 @@ ifeq ($(OS), Windows_NT)
 	BUILDDIR    :=
 	TARGETDIR   :=
 	OSFLAG := "OS_WIN"
+	# TODO: What is the MKL path on Windoze?
+	MKLROOT := #???
+	MKLLIB := -L$(MKLROOT)/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lpthread -lm
+	MKLINC := -I$(MKLROOT)/include
 	## see also https://software.intel.com/en-us/compiler_winapp_f (2014-12-03)
-	FFLAGS := $(FFLAGS) /static /fpp /Qmkl /Qopenmp-link:static /Qlocation,link,"${VCINSTALLDIR}/bin" /D $(OSFLAG)
+	FFLAGS := $(FFLAGS) /fpp /Qmkl /Qopenmp /static /Qopenmp-link:static /Qlocation,link,"${VCINSTALLDIR}/bin" /D $(OSFLAG) $(MKLINC) $(MKLLIB)
 	obj := .obj
 	MAKEDIR :=
 	exe := .exe
@@ -41,7 +45,7 @@ else
 	MKLLIB := -L$(MKLROOT)/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lpthread -lm
 	MKLINC := -I$(MKLROOT)/include
 	exe :=
-	FFLAGS:= $(FFLAGS) -fpp -mkl -openmp -static-intel -openmp-link=static -module $(BUILDDIR) -D $(OSFLAG) $(MKLINC) $(MKLLIB)
+	FFLAGS := $(FFLAGS) -fpp -mkl -openmp -static-intel -openmp-link=static -module $(BUILDDIR) -D $(OSFLAG) $(MKLINC) $(MKLLIB)
 	uname := $(shell uname)
 	MAKEDIR := @mkdir -p
 	DEL := rm -rf
@@ -51,6 +55,7 @@ else
 	endif
 endif
 
+# Required modules
 MODS := $(ALPHAHOUSEDIR)AlphaHouseMod.f90 \
 	$(ALPHAHOUSEDIR)AlphaStatMod.f90 \
 	$(ALPHAHOUSEDIR)IntelRNG/IntelRNGMod.f90
@@ -91,12 +96,12 @@ $(TARGETDIR)$(NAME)$(exe): Makefile $(MODS) $(SRCDIR)$(NAME).f90
 
 # Cleaning
 sparklinglyclean: veryclean
-	rm -rf TARGETDIR
+	$(DEL) TARGETDIR
 
 veryclean: clean
 	$(DEL) $(TARGETDIR)$(NAME)$(exe)
 
 clean:
-	$(DEL) -rf $(BUILDDIR) *$(obj) *.mod *.dwarf *.i90 *__genmod* *~
+	$(DEL) $(BUILDDIR) *$(obj) *.mod *.dwarf *.i90 *__genmod* *~
 
 .PHONY: make veryclean all
