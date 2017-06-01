@@ -3,7 +3,7 @@ NAME:=AlphaBayes
 VERSION:= $(shell git rev-parse --short HEAD)
 SUBVERSION:=0
 PROGRAM:=$(NAME)$(VERSION).$(SUBVERSION)
-ALPHAHOUSEDIR:=../AlphaHouse/
+ALPHAHOUSEDIR:=alphahouse/
 
 # Set the default compiler to iFort
 FC:=ifort
