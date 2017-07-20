@@ -29,8 +29,8 @@ module AlphaBayesMod
 
   use ISO_Fortran_Env, STDIN=>input_unit,STDOUT=>output_unit,STDERR=>error_unit
   use IntelRNGMod
-  use AlphaHouseMod, only : RandomOrder,Int2Char
-  use AlphaStatMod, only : CalcMean,CalcVar,CalcCorrelation,CorrelationD
+  use AlphaHouseMod
+  use AlphaStatMod
 
   implicit none
 
@@ -167,8 +167,8 @@ module AlphaBayesMod
         end if
       end do
 
-      MeanY=CalcMean(PhenoTr(:,1))
-      VarY=CalcVar(PhenoTr(:,1),MeanY)
+      MeanY=Mean(PhenoTr(:,1))
+      VarY=Var(PhenoTr(:,1),MeanY)
       PhenoTr(:,1)=(PhenoTr(:,1)-MeanY)/sqrt(VarY)
 
       SumExpVarX=0.0d0
@@ -199,7 +199,7 @@ module AlphaBayesMod
         end do
 
         ! Standardize
-        TmpStat=CalcVar(GenosTr(:,j))
+        TmpStat=Var(GenosTr(:,j))
         ExpVarX=2.0d0*(1.0d0-AlleleFreq(j))*AlleleFreq(j)+0.00001d0 ! if p=0.00001, then 2*p*q=0.00001
         SumExpVarX=SumExpVarX+ExpVarX
         ObsVarX=TmpStat+0.00001d0
@@ -362,7 +362,7 @@ module AlphaBayesMod
       ! These prior parameters are modelled as in BGLR
       R2=0.5d0
 
-      TmpR=CalcVar(E(:,1)) ! should be 1 if Phen is standardized
+      TmpR=Var(E(:,1)) ! should be 1 if Phen is standardized
       VarESamp=TmpR*(1.0d0-R2)
       EDF0=5.0d0
       EDF=nAnisTrR+EDF0
@@ -374,7 +374,7 @@ module AlphaBayesMod
       MX2(:)=0.0d0
       do j=1,nSnp
         SX2(j)=sum(GenosTr(:,j)*GenosTr(:,j))
-        MX2(j)=CalcMean(GenosTr(:,j))
+        MX2(j)=Mean(GenosTr(:,j))
         MX2(j)=MX2(j)*MX2(j)
       end do
       MSX=sum(SX2)/nAnisTrR-sum(MX2)
@@ -501,7 +501,7 @@ module AlphaBayesMod
       ! These prior parameters are modelled as in BGLR
       R2=0.5d0
 
-      TmpR=CalcVar(E(:,1)) ! should be 1 if Phen is standardized
+      TmpR=Var(E(:,1)) ! should be 1 if Phen is standardized
       VarESamp=TmpR*(1.0d0-R2)
       EDF0=5.0d0
       EDF=nAnisTrR+EDF0
@@ -513,7 +513,7 @@ module AlphaBayesMod
       MX2(:)=0.0d0
       do j=1,nSnp
         SX2(j)=sum(GenosTr(:,j)*GenosTr(:,j))
-        MX2(j)=CalcMean(GenosTr(:,j))
+        MX2(j)=Mean(GenosTr(:,j))
         MX2(j)=MX2(j)*MX2(j)
       end do
       MSX=sum(SX2)/nAnisTrR-sum(MX2)
@@ -621,10 +621,10 @@ module AlphaBayesMod
       character(len=100) :: DumC,File
       character(len=20),allocatable :: IdTe(:)
 
-      type(CorrelationD) :: Cor
+      type(CorrelationReal64) :: Cors
 
       open(newunit=UnitSum,file="PredictionsSummary.txt",status="unknown")
-      write(UnitSum,"(a14,3(1x,a12),3(1x,a20))") "Set","CorObsEst","SlopeObsEst","SlopeEstObs","CovObsEst","VarObs","VarEst"
+      write(UnitSum,"(a14,3(1x,a12),3(1x,a20))") "Set","CorsObsEst","SlopeObsEst","SlopeEstObs","CovObsEst","VarObs","VarEst"
 
       allocate(Ebv(nAnisTr,1))
 
@@ -638,9 +638,9 @@ module AlphaBayesMod
       flush(UnitEbv)
       close(UnitEbv)
 
-      Cor=CalcCorrelation(PhenoTr(:,1),Ebv(:,1))
+      Cors=Cor(PhenoTr(:,1),Ebv(:,1))
       DumC="Train"
-      write(UnitSum,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cor%Cor,Cor%Cov/Cor%Var2,Cor%Cov/Cor%Var1,Cor%Cov,Cor%Var1,Cor%Var2
+      write(UnitSum,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cors%Cor,Cors%Cov/Cors%Var2,Cors%Cov/Cors%Var1,Cors%Cov,Cors%Var1,Cors%Var2
 
       deallocate(Ebv)
 
@@ -728,9 +728,9 @@ module AlphaBayesMod
         flush(UnitEbv)
         close(UnitEbv)
 
-        Cor=CalcCorrelation(PhenoTe(1:nAnisTe(Pop),1),Ebv(1:nAnisTe(Pop),1))
+        Cors=cor(PhenoTe(1:nAnisTe(Pop),1),Ebv(1:nAnisTe(Pop),1))
         DumC="Predict"//Int2Char(Pop)
-        write(UnitSum,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cor%Cor,Cor%Cov/Cor%Var2,Cor%Cov/Cor%Var1,Cor%Cov,Cor%Var1,Cor%Var2
+        write(UnitSum,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cors%Cor,Cors%Cov/Cors%Var2,Cors%Cov/Cors%Var1,Cors%Cov,Cors%Var1,Cors%Var2
 
         ! open(newunit=UnitGenoTe,file="GenoTest"//Int2Char(Pop)//"Processed.txt",status="unknown")
         ! open(newunit=UnitPhenoTe,file="PhenoTest"//Int2Char(Pop)//"Processed.txt",status="unknown")
