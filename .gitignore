@@ -1,7 +1,11 @@
-CMakeFiles/
-CMakeCache.txt
 bin/
-cmake_install.cmake
-objs/
+CMakeCache.txt
 CMakeDoxyfile.in
 CMakeDoxygenDefaults.cmake
+CMakeFiles/
+cmake_install.cmake
+example/*Estimate.txt
+example/*Samples.txt
+example/Prediction*.txt
+Makefile
+objs/
