@@ -3,3 +3,5 @@ CMakeCache.txt
 bin/
 cmake_install.cmake
 objs/
+CMakeDoxyfile.in
+CMakeDoxygenDefaults.cmake
