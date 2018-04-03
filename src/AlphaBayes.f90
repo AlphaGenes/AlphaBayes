@@ -47,9 +47,17 @@ module AlphaBayesMod
   REAL(REAL64),PARAMETER :: ONER=1.0d0,ZEROR=0.0d0
 
   CHARACTER(LEN=100),PARAMETER :: SPECFILE="AlphaBayesSpec.txt"
+
+  CHARACTER(LEN=100),PARAMETER :: INTERCEPTESTIMATEFILE="InterceptEstimate.txt"
+  CHARACTER(LEN=100),PARAMETER :: INTERCEPTSAMPLESFILE="InterceptSamples.txt"
+
+  CHARACTER(LEN=100),PARAMETER :: SNPESTIMATEFILE="SnpEstimate.txt"
+  CHARACTER(LEN=100),PARAMETER :: SNPSAMPLESFILE="SnpSamples.txt"
+
   CHARACTER(LEN=100),PARAMETER :: RESIDUALVARIANCEESTIMATEFILE="ResidualVarianceEstimate.txt"
+  CHARACTER(LEN=100),PARAMETER :: RESIDUALVARIANCESAMPLESFILE="ResidualVarianceSamples.txt"
   CHARACTER(LEN=100),PARAMETER :: SNPVARIANCEESTIMATEFILE="SnpVarianceEstimate.txt"
-  CHARACTER(LEN=100),PARAMETER :: GENETICVARIANCEESTIMATEFILE="GeneticVarianceEstimate.txt"
+  CHARACTER(LEN=100),PARAMETER :: SNPVARIANCESAMPLESFILE="SnpVarianceSamples.txt"
 
   private
   public :: ReadParam,ReadData,Method,Prediction
@@ -260,7 +268,7 @@ module AlphaBayesMod
     subroutine RidgeRegression
       implicit none
 
-      integer(int32) :: Iter,j,Snp,RandomOrdering(nSnp)
+      integer(int32) :: Iter,j,Snp,RandomOrdering(nSnp),UnitVar
 
       real(real64) :: ddot,VarS,Rhs,Lhs,Sol,Diff,Eps
       real(real64),allocatable :: XpXTauE(:,:),Xg(:,:),E(:,:)
@@ -321,6 +329,15 @@ module AlphaBayesMod
         end if
       end do
 
+      open(newunit=UnitVar,file=INTERCEPTESTIMATEFILE,status="unknown")
+      write(UnitVar,"(f20.10)") Mu*sqrt(VarY)
+      close(UnitVar)
+      open(newunit=UnitVar,file=SNPESTIMATEFILE,status="unknown")
+      do j=1,nSnp
+        write(UnitVar,"(f20.10)") G(j,1)*sqrt(VarY)
+      end do
+      close(UnitVar)
+
       deallocate(XpXTauE)
       deallocate(Xg)
       deallocate(E)
@@ -331,17 +348,21 @@ module AlphaBayesMod
     subroutine RidgeRegressionMCMC
       implicit none
 
-      integer(int32) :: Iter,j,Snp,RandomOrdering(nSnp),UnitVar
+      integer(int32) :: Iter,i,j,Snp,RandomOrdering(nSnp),UnitVar
 
       real(real64) :: TmpR,ddot,Rhs,Lhs,Sol,Diff,nSampR,VarESamp,VarEAccum,VarGSamp,VarGAccum
       real(real64) :: R2,EDF0,EDF,GDF0,GDF,ES0,GS0,MSX,EpE,GpG
-      real(real64),allocatable :: GAccum(:,:),SX2(:),MX2(:),XpX(:,:),Xg(:,:),E(:,:)
+      real(real64),allocatable :: MuAll(:),GAll(:,:),VarEAll(:),VarGAll(:)
+      real(real64),allocatable :: SX2(:),MX2(:),XpX(:,:),Xg(:,:),E(:,:)
       real(real64),allocatable :: GaussDevMu(:),GaussDevSnp(:),GammaDevE(:),GammaDevG(:)
 
       allocate(XpX(nSnp,1))
       allocate(Xg(nAnisTr,1))
       allocate(E(nAnisTr,1))
-      allocate(GAccum(nSnp,1))
+      allocate(MuAll(nIter))
+      allocate(GAll(nSnp,nIter))
+      allocate(VarEAll(nIter))
+      allocate(VarGAll(nIter))
       allocate(SX2(nSnp))
       allocate(MX2(nSnp))
       allocate(GaussDevMu(nIter))
@@ -355,7 +376,6 @@ module AlphaBayesMod
       ! Initialise
       Mu=0.0d0
       G=0.0d0
-      GAccum=0.0d0
       VarGAccum=0.0d0
       VarEAccum=0.0d0
 
@@ -435,30 +455,60 @@ module AlphaBayesMod
         EpE=ddot(nAnisTr,E(:,1),1,E(:,1),1)+ES0
         VarESamp=EpE/GammaDevE(Iter)
 
-        ! Posterior means
-        if (Iter>nBurn) then
-          GAccum=GAccum+G/nSampR
-          VarGAccum=VarGAccum+VarGSamp/nSampR
-          VarEAccum=VarEAccum+VarESamp/nSampR
-        end if
+        MuAll(Iter)=Mu
+        GAll(:,Iter)=G(:,1)
+        VarEAll(Iter)=VarESamp
+        VarGAll(Iter)=VarGSamp
+
       end do
 
-      G=GAccum
+      ! Posterior means
+      do j=nBurn+1,nIter
+        Mu=Mu+MuAll(j)/nSampR
+        G(:,1)=G(:,1)+GAll(:,j)/nSampR
+        VarEAccum=VarEAccum+VarEAll(j)/nSampR
+        VarGAccum=VarGAccum+VarGAll(j)/nSampR
+      end do
+
+      ! Outputs
+      open(newunit=UnitVar,file=INTERCEPTSAMPLESFILE,status="unknown")
+      write(UnitVar,*) MuAll(:)*sqrt(VarY)
+      close(UnitVar)
+
+      open(newunit=UnitVar,file=SNPSAMPLESFILE,status="unknown")
+      GaussDevSnp(:)=0.0d0 ! just a placeholder for zero output of fixed markers
+      j=0
+      do i=1,nSnpExternal
+          if (FixedSnp(i)==1) then
+            j=j+1
+            write(UnitVar,*) GAll(j,:)/ScaleCoef(j)*sqrt(VarY)
+          else
+            write(UnitVar,*) GaussDevSnp(:)
+          end if
+      end do
+      close(UnitVar)
 
       open(newunit=UnitVar,file=RESIDUALVARIANCEESTIMATEFILE,status="unknown")
       write(UnitVar,"(f20.10)") VarEAccum*VarY
       close(UnitVar)
+      open(newunit=UnitVar,file=RESIDUALVARIANCESAMPLESFILE,status="unknown")
+      write(UnitVar,*) VarEAll(:)*VarY
+      close(UnitVar)
+
       open(newunit=UnitVar,file=SNPVARIANCEESTIMATEFILE,status="unknown")
       write(UnitVar,"(f20.10)") VarGAccum*VarY
       close(UnitVar)
-      open(newunit=UnitVar,file=GENETICVARIANCEESTIMATEFILE,status="unknown")
-      write(UnitVar,"(f20.10)") VarGAccum*2*sum(AlleleFreq(:)*(1-AlleleFreq(:)))*VarY
+      open(newunit=UnitVar,file=SNPVARIANCESAMPLESFILE,status="unknown")
+      write(UnitVar,*) VarGAll(:)*VarY
       close(UnitVar)
 
       deallocate(XpX)
       deallocate(Xg)
       deallocate(E)
-      deallocate(GAccum)
+      deallocate(MuAll)
+      deallocate(GAll)
+      deallocate(VarEAll)
+      deallocate(VarGAll)
     end subroutine
 
     !###########################################################################
@@ -597,11 +647,6 @@ module AlphaBayesMod
         write(UnitVar,"(f20.10)") VarGAccum(j)*VarY
       end do
       close(UnitVar)
-      open(newunit=UnitVar,file=GENETICVARIANCEESTIMATEFILE,status="unknown")
-      do j=1,nSnp
-        write(UnitVar,"(f20.10)") VarGAccum(j)*2*AlleleFreq(j)*(1-AlleleFreq(j))*VarY
-      end do
-      close(UnitVar)
 
       deallocate(XpX)
       deallocate(Xg)
@@ -659,7 +704,12 @@ module AlphaBayesMod
       G(:,1)=G(:,1)/ScaleCoef(:)*sqrt(VarY)
 
       ! Output
-      open(newunit=UnitSnpSol,file="SnpEstimates.txt",status="unknown")
+      open(newunit=UnitSnpSol,file=INTERCEPTESTIMATEFILE,status="unknown")
+      write(UnitSnpSol,"(f20.10)") Mu
+      flush(UnitSnpSol)
+      close(UnitSnpSol)
+
+      open(newunit=UnitSnpSol,file=SNPESTIMATEFILE,status="unknown")
       write(UnitSnpSol,"(a20,1x,a20)") "Snp","Estimate"
       j=0
       do i=1,nSnpExternal
