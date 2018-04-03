@@ -1,9 +1,5 @@
-*.txt
-*.i90
-*.o
-*.obj
-*.mod
-*.dwarf
-AlphaBayes
-AlphaBayes.exe
-.Rhistory
+CMakeFiles/
+CMakeCache.txt
+bin/
+cmake_install.cmake
+objs/
