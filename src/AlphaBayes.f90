@@ -41,7 +41,7 @@ module AlphaBayesModule
   integer(int32),allocatable :: nAnisTe(:),nSnpPerGenoPart(:),SnpPerGenoPart(:,:)
 
   real(real64) :: MeanY,VarY,SdY,VarG,VarE,Mu,nSnpR,nAnisTrR,ExpVarX,SumExpVarX,ObsVarX,SumObsVarX
-  real(real64),allocatable :: AlleleFreq(:),ScaleCoef(:),PhenoTr(:),G(:),GenosTr(:,:)
+  real(real64),allocatable :: AlleleFreq(:),ScaleCoef(:),PhenoTr(:),G(:),GenosTr(:,:),E(:),XpX(:)
 
   character(len=1000) :: GenoTrFile,PhenoTrFile,Method
   character(len=1000),allocatable :: GenoTeFile(:),PhenoTeFile(:)
@@ -298,6 +298,15 @@ module AlphaBayesModule
       ! close(GenoTrUnit)
       ! flush(PhenoTrUnit)
       ! close(PhenoTrUnit)
+
+      ! Here as both RidgeRegression and RidgeRegressionMCMC use them
+      allocate(E(nAnisTr))
+      allocate(XpX(nSnp))
+
+      ! Construct XpXTauE
+      do j=1,nSnp
+        XpX(j)=dot(x=GenosTr(:,j),y=GenosTr(:,j)) + tiny(GenosTr(1,1))
+      end do
     end subroutine
 
     !###########################################################################
@@ -308,11 +317,9 @@ module AlphaBayesModule
       integer(int32) :: Iter,i,j,Snp,RandomOrdering(nSnp),Unit
 
       real(real64) :: VarS,Rhs,Lhs,Sol,Diff,Eps
-      real(real64),allocatable :: XpXTauE(:),Ebv(:),E(:),EbvGenoPart(:)
+      real(real64),allocatable :: Ebv(:),EbvGenoPart(:)
 
-      allocate(XpXTauE(nSnp))
       allocate(Ebv(nAnisTr))
-      allocate(E(nAnisTr))
       if (nGenoPart.gt.0) then
         allocate(EbvGenoPart(nAnisTr))
       end if
@@ -325,10 +332,7 @@ module AlphaBayesModule
       G=0.0d0
 
       ! Construct XpXTauE
-      do j=1,nSnp
-        XpXTauE(j)=dot(x=GenosTr(:,j),y=GenosTr(:,j)) + tiny(GenosTr(1,1))
-      end do
-      XpXTauE=XpXTauE/VarE ! can do it only once for all rounds!!!
+      XpX=XpX/VarE ! can do it only once for all rounds!!!
       VarS=VarG/nSnpR ! approximate variance of allele substitution effects
 
       ! Iterate
@@ -348,8 +352,8 @@ module AlphaBayesModule
         RandomOrdering=RandomOrder(nSnp)
         do j=1,nSnp
           Snp=RandomOrdering(j)
-          Lhs=XpXTauE(Snp) + 1.0d0/VarS
-          Rhs=dot(x=GenosTr(:,Snp),y=E)/VarE + XpXTauE(Snp)*G(Snp)
+          Lhs=XpX(Snp) + 1.0d0/VarS
+          Rhs=dot(x=GenosTr(:,Snp),y=E)/VarE + XpX(Snp)*G(Snp)
           Sol=Rhs/Lhs
           Diff=Sol-G(Snp)
           E=E-GenosTr(:,Snp)*Diff
@@ -381,8 +385,13 @@ module AlphaBayesModule
       flush(Unit)
       close(Unit)
 
-      if (nGenoPart.gt.0) then
+      ! Recalculate Ebv and residuals for later use
+      if (nGenoPart.gt.0.or.Method.eq."RidgeMCMC") then
         call gemv(A=GenosTr,x=G/ScaleCoef*SdY,y=Ebv)
+        E=PhenoTr-Mu-Ebv
+      end if
+
+      if (nGenoPart.gt.0) then
         do i=1,nGenoPart
           EbvGenoPart=0.0d0
           ! Might have used gemv here, but for MCMC this would mean calling gemv nIter*nGenoPart times!!!
@@ -404,12 +413,11 @@ module AlphaBayesModule
         end do
         flush(Unit)
         close(Unit)
-        deallocate(EbvGenoPart)
       end if
 
-      deallocate(XpXTauE)
+      ! Convert XpXTauE=XpX/VarE back to XpX
+      XpX=XpX*VarE
       deallocate(Ebv)
-      deallocate(E)
       if (nGenoPart.gt.0) then
         deallocate(EbvGenoPart)
       end if
@@ -427,7 +435,7 @@ module AlphaBayesModule
       real(real64) :: MuSamp,VarESamp,VarGSamp
       real(real64) :: R2,EDF0,EDF,GDF0,GDF,ES0,GS0,MSX,EpE,GpG
       real(real64),allocatable :: GSamp(:)
-      real(real64),allocatable :: SX2(:),MX2(:),XpX(:),E(:),Ebv(:),EbvGenoPart(:)
+      real(real64),allocatable :: SX2(:),MX2(:),Ebv(:),EbvGenoPart(:)
       real(real64),allocatable :: GaussDevMu(:),GaussDevSnp(:),GammaDevE(:),GammaDevG(:)
 
       character(len=100) :: GSampFmt, EbvFmt
@@ -435,9 +443,7 @@ module AlphaBayesModule
       GSampFmt="("//trim(Int2Char(nSnp))//trim("f)")
       EbvFmt="("//trim(Int2Char(nAnisTr))//trim("f)")
 
-      allocate(XpX(nSnp))
       allocate(Ebv(nAnisTr))
-      allocate(E(nAnisTr))
       allocate(GSamp(nSnp))
       allocate(SX2(nSnp))
       allocate(MX2(nSnp))
@@ -449,9 +455,6 @@ module AlphaBayesModule
         allocate(GenoPartUnit(nGenoPart+1))
         allocate(EbvGenoPart(nAnisTr))
       end if
-
-      ! Working phenotypes
-      E=PhenoTr
 
       ! Initialise
       Mu=0.0d0
@@ -466,7 +469,7 @@ module AlphaBayesModule
       ! These prior parameters are modelled as in BGLR
       R2=0.5d0
 
-      TmpR=Var(E) ! should be 1 if Phen is standardized
+      TmpR=1 ! =Var(E) ! should be 1 when Phen is standardized
       VarESamp=TmpR*(1.0d0-R2)
       EDF0=5.0d0
       EDF=nAnisTrR+EDF0
@@ -484,11 +487,6 @@ module AlphaBayesModule
       MSX=sum(SX2)/nAnisTrR-sum(MX2)
       VarGSamp=TmpR*R2/MSX
       GS0=VarGSamp*(GDF0+2.0d0)
-
-      ! Construct XpX
-      do j=1,nSnp
-        XpX(j)=dot(x=GenosTr(:,j),y=GenosTr(:,j)) + tiny(GenosTr(1,1))
-      end do
 
       ! Gauss and Gamma deviates
       GaussDevMu(:)=SampleIntelGaussD(n=nIter)
@@ -518,7 +516,9 @@ module AlphaBayesModule
         E=E-Diff
         MuSamp=Sol
         ! write(MuUnit,*) MuSamp*SdY
-        Mu=Mu+MuSamp/nSampR
+        if (Iter.gt.nBurn) then
+          Mu=Mu+MuSamp/nSampR
+        end if
 
         ! Snp effects
         RandomOrdering=RandomOrder(nSnp)
@@ -533,13 +533,17 @@ module AlphaBayesModule
           GSamp(Snp)=Sol
         end do
         write(GUnit,GSampFmt) GSamp/ScaleCoef*SdY
-        G=G+GSamp/nSampR
+        if (Iter.gt.nBurn) then
+          G=G+GSamp/nSampR
+        end if
 
         ! Snp variance
         GpG=dot(x=GSamp,y=GSamp)+GS0
         VarGSamp=GpG/GammaDevG(Iter)
         write(VarGUnit,*) VarGSamp*VarY
-        VarG=VarG+VarGSamp/nSampR
+        if (Iter.gt.nBurn) then
+          VarG=VarG+VarGSamp/nSampR
+        end if
 
         ! Recompute residuals to avoid rounding errors
         if (mod(Iter,100).eq.0) then
@@ -551,7 +555,9 @@ module AlphaBayesModule
         EpE=dot(x=E,y=E)+ES0
         VarESamp=EpE/GammaDevE(Iter)
         write(VarEUnit,*) VarESamp*VarY
-        VarE=VarE+VarESamp/nSampR
+        if (Iter.gt.nBurn) then
+          VarE=VarE+VarESamp/nSampR
+        end if
 
         ! Genome partitions
         if (nGenoPart.gt.0) then
@@ -798,6 +804,7 @@ program AlphaBayes
     write(STDOUT, "(a)") ""
     write(STDOUT, "(a)") "Running estimation of marker effects and variance components with MCMC"
     write(STDOUT, "(a)") ""
+    call RidgeRegression
     call RidgeRegressionMCMC
   end if
   call Prediction
