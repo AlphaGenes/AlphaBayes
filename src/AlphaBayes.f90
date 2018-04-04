@@ -31,14 +31,14 @@ module AlphaBayesModule
   use IntelRNGMod
   use AlphaHouseMod
   use AlphaStatMod
-  use Blas95, only : dot, gemv
+  use Blas95, only : dot, & ! https://software.intel.com/en-us/mkl-developer-reference-fortran-dot  dot(x,y) does x'y
+                     gemv   ! https://software.intel.com/en-us/mkl-developer-reference-fortran-gemv gemv(A,x,y) does y=Ax
   use F95_precision
 
   implicit none
 
   integer(int32) :: nSnp,nAnisTr,nIter,nBurn,nProcessor,ScalingOpt,nPartition,nTePop
-  integer(int32),allocatable :: nAnisTe(:)
-  integer(int32),allocatable :: nSnpPerPartition(:),SnpPerPartition(:,:),nSnpPerPartition(:),SnpPerPartition(:,:)
+  integer(int32),allocatable :: nAnisTe(:),nSnpPerPartition(:),SnpPerPartition(:,:)
 
   real(real64) :: MeanY,VarY,SdY,VarG,VarE,Mu,nSnpR,nAnisTrR,ExpVarX,SumExpVarX,ObsVarX,SumObsVarX
   real(real64),allocatable :: AlleleFreq(:),ScaleCoef(:),PhenoTr(:),G(:),GenosTr(:,:)
@@ -266,7 +266,7 @@ module AlphaBayesModule
 
       integer(int32) :: Iter,j,Snp,RandomOrdering(nSnp),Unit
 
-      real(real64) :: ddot,VarS,Rhs,Lhs,Sol,Diff,Eps
+      real(real64) :: VarS,Rhs,Lhs,Sol,Diff,Eps
       real(real64),allocatable :: XpXTauE(:),Xg(:),E(:),XgPartition(:)
 
       allocate(XpXTauE(nSnp))
@@ -282,7 +282,7 @@ module AlphaBayesModule
 
       ! Construct XpXTauE
       do j=1,nSnp
-        XpXTauE(j)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + tiny(GenosTr(1,1))
+        XpXTauE(j)=dot(x=GenosTr(:,j),y=GenosTr(:,j)) + tiny(GenosTr(1,1))
       end do
       XpXTauE=XpXTauE/VarE ! can do it only once for all rounds!!!
       VarS=VarG/nSnpR ! approximate variance of allele substitution effects
@@ -305,7 +305,7 @@ module AlphaBayesModule
         do j=1,nSnp
           Snp=RandomOrdering(j)
           Lhs=XpXTauE(Snp) + 1.0d0/VarS
-          Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E,1)/VarE + XpXTauE(Snp)*G(Snp)
+          Rhs=dot(x=GenosTr(:,Snp),y=E)/VarE + XpXTauE(Snp)*G(Snp)
           Sol=Rhs/Lhs
           Diff=Sol-G(Snp)
           E=E-GenosTr(:,Snp)*Diff
@@ -315,9 +315,7 @@ module AlphaBayesModule
 
         ! Recompute residuals to avoid rounding errors
         if (mod(Iter,100).eq.0) then
-          ! https://software.intel.com/en-us/mkl-developer-reference-fortran-gemv
-          call gemv(A=GenosTr,x=G,y=Xg) ! y=alpha*Ax+beta*y
-          ! call dgemv("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Xg,nAnisTr)
+          call gemv(A=GenosTr,x=G,y=Xg)
           E=PhenoTr-Mu-Xg
         end if
 
@@ -351,7 +349,7 @@ module AlphaBayesModule
 
       integer(int32) :: Iter,i,j,Snp,RandomOrdering(nSnp),Unit
 
-      real(real64) :: TmpR,ddot,Rhs,Lhs,Sol,Diff,nSampR
+      real(real64) :: TmpR,Rhs,Lhs,Sol,Diff,nSampR
       real(real64) :: MuSamp,VarESamp,VarGSamp
       real(real64) :: R2,EDF0,EDF,GDF0,GDF,ES0,GS0,MSX,EpE,GpG
       real(real64),allocatable :: GSamp(:),MuAll(:),GAll(:,:),VarEAll(:),VarGAll(:)
@@ -413,7 +411,7 @@ module AlphaBayesModule
 
       ! Construct XpX
       do j=1,nSnp
-        XpX(j)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + tiny(GenosTr(1,1))
+        XpX(j)=dot(x=GenosTr(:,j),y=GenosTr(:,j)) + tiny(GenosTr(1,1))
       end do
 
       ! Gauss and Gamma deviates
@@ -437,11 +435,8 @@ module AlphaBayesModule
         GaussDevSnp(:)=SampleIntelGaussD(n=nSnp)
         do j=1,nSnp
           Snp=RandomOrdering(j)
-          ! This does not work (got too big variances!), and I can not see why
-          !Lhs=XpX(Snp) + VarESamp/VarGSamp
-          !Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E,1) + XpX(Snp)*GSamp(Snp)
           Lhs=XpX(Snp)/VarESamp + 1.0d0/VarGSamp
-          Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E,1)/VarESamp + XpX(Snp)*GSamp(Snp)/VarESamp
+          Rhs=dot(x=GenosTr(:,Snp),y=E)/VarESamp + XpX(Snp)*GSamp(Snp)/VarESamp
           Sol=Rhs/Lhs + GaussDevSnp(j)/sqrt(Lhs)
           Diff=Sol-GSamp(Snp)
           E=E-GenosTr(:,Snp)*Diff
@@ -449,19 +444,17 @@ module AlphaBayesModule
         end do
 
         ! Snp variance
-        GpG=ddot(nSnp,GSamp,1,GSamp,1)+GS0
+        GpG=dot(x=GSamp,y=GSamp)+GS0
         VarGSamp=GpG/GammaDevG(Iter)
 
         ! Recompute residuals to avoid rounding errors
         if (mod(Iter,100).eq.0) then
-          ! https://software.intel.com/en-us/mkl-developer-reference-fortran-gemv
-          call gemv(A=GenosTr,x=GSamp,y=Xg) ! y=alpha*Ax+beta*y
-          ! call dgemv("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,GSamp,nSnp,ZEROR,Xg,nAnisTr)
+          call gemv(A=GenosTr,x=GSamp,y=Xg)
           E=PhenoTr-MuSamp-Xg
         end if
 
         ! Residual variance
-        EpE=ddot(nAnisTr,E,1,E,1)+ES0
+        EpE=dot(x=E,y=E)+ES0
         VarESamp=EpE/GammaDevE(Iter)
 
         MuAll(Iter)=MuSamp
@@ -549,9 +542,7 @@ module AlphaBayesModule
       allocate(Ebv(nAnisTr))
 
       open(newunit=Unit,file="PredictionsForSetTrain.txt",status="unknown")
-      ! https://software.intel.com/en-us/mkl-developer-reference-fortran-gemv
-      call gemv(A=GenosTr,x=G,y=Ebv) ! y=alpha*Ax+beta*y
-      ! call dgemv("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Ebv,nAnisTr)
+      call gemv(A=GenosTr,x=G,y=Ebv)
       PhenoTr=MeanY+PhenoTr*SdY
       write(Unit,"(a20,2(1x,a20))") "Id","Observed","Estimate"
       do i=1,nAnisTr
@@ -614,9 +605,7 @@ module AlphaBayesModule
 
         File="PredictionsForSetPredict"//Int2Char(Pop)//".txt"
         open(newunit=Unit,file=trim(File),status="unknown")
-        ! https://software.intel.com/en-us/mkl-developer-reference-fortran-gemv
-        call gemv(A=GenosTe(1:nAnisTe(Pop),:),x=G,y=Ebv(1:nAnisTe(Pop))) ! y=alpha*Ax+beta*y
-        ! call dgemv("n","n",nAnisTe(Pop),1,nSnp,ONER,GenosTe(1:nAnisTe(Pop),:),nAnisTe(Pop),G,nSnp,ZEROR,Ebv(1:nAnisTe(Pop)),nAnisTe(Pop))
+        call gemv(A=GenosTe(1:nAnisTe(Pop),:),x=G,y=Ebv(1:nAnisTe(Pop)))
         write(Unit,"(a20,2(1x,a20))") "Id","Observed","Estimate"
         do i=1,nAnisTe(Pop)
           write(Unit,"(a20,2(1x,f20.10))") IdTe(i),PhenoTe(i),Ebv(i)
