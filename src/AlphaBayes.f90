@@ -515,8 +515,8 @@ module AlphaBayesModule
         Diff=Sol-MuSamp
         E=E-Diff
         MuSamp=Sol
-        ! write(MuUnit,*) MuSamp*SdY
         if (Iter.gt.nBurn) then
+          ! write(MuUnit,*) MuSamp*SdY
           Mu=Mu+MuSamp/nSampR
         end if
 
@@ -532,16 +532,16 @@ module AlphaBayesModule
           E=E-GenosTr(:,Snp)*Diff
           GSamp(Snp)=Sol
         end do
-        write(GUnit,GSampFmt) GSamp/ScaleCoef*SdY
         if (Iter.gt.nBurn) then
+          write(GUnit,GSampFmt) GSamp/ScaleCoef*SdY
           G=G+GSamp/nSampR
         end if
 
         ! Snp variance
         GpG=dot(x=GSamp,y=GSamp)+GS0
         VarGSamp=GpG/GammaDevG(Iter)
-        write(VarGUnit,*) VarGSamp*VarY
         if (Iter.gt.nBurn) then
+          write(VarGUnit,*) VarGSamp*VarY
           VarG=VarG+VarGSamp/nSampR
         end if
 
@@ -554,25 +554,27 @@ module AlphaBayesModule
         ! Residual variance
         EpE=dot(x=E,y=E)+ES0
         VarESamp=EpE/GammaDevE(Iter)
-        write(VarEUnit,*) VarESamp*VarY
         if (Iter.gt.nBurn) then
+          write(VarEUnit,*) VarESamp*VarY
           VarE=VarE+VarESamp/nSampR
         end if
 
         ! Genome partitions
-        if (nGenoPart.gt.0) then
-          call gemv(A=GenosTr,x=GSamp/ScaleCoef*SdY,y=Ebv)
-          do i=1,nGenoPart
-            EbvGenoPart=0.0d0
-            ! Might have used gemv here, but for MCMC this would mean calling gemv nIter*nGenoPart times!!!
-            do j=1,nSnpPerGenoPart(i)
-              Snp=SnpPerGenoPart(j,i)
-              EbvGenoPart=EbvGenoPart+(GenosTr(:,Snp)*GSamp(Snp)/ScaleCoef(Snp)*SdY)
+        if (Iter.gt.nBurn) then
+          if (nGenoPart.gt.0) then
+            call gemv(A=GenosTr,x=GSamp/ScaleCoef*SdY,y=Ebv)
+            do i=1,nGenoPart
+              EbvGenoPart=0.0d0
+              ! Might have used gemv here, but for MCMC this would mean calling gemv nIter*nGenoPart times!!!
+              do j=1,nSnpPerGenoPart(i)
+                Snp=SnpPerGenoPart(j,i)
+                EbvGenoPart=EbvGenoPart+(GenosTr(:,Snp)*GSamp(Snp)/ScaleCoef(Snp)*SdY)
+              end do
+              Ebv=Ebv-EbvGenoPart
+              write(GenoPartUnit(i),EbvFmt) EbvGenoPart
             end do
-            Ebv=Ebv-EbvGenoPart
-            write(GenoPartUnit(i),EbvFmt) EbvGenoPart
-          end do
-          write(GenoPartUnit(i),EbvFmt) Ebv
+            write(GenoPartUnit(i),EbvFmt) Ebv
+          end if
         end if
 
       end do
