@@ -25,12 +25,14 @@
 
 !###############################################################################
 
-module AlphaBayesMod
+module AlphaBayesModule
 
   use ISO_Fortran_Env, STDIN=>input_unit,STDOUT=>output_unit,STDERR=>error_unit
   use IntelRNGMod
   use AlphaHouseMod
   use AlphaStatMod
+  use Blas95, only : dot, gemv
+  use F95_precision
 
   implicit none
 
@@ -39,7 +41,7 @@ module AlphaBayesMod
   integer(int32),allocatable :: nSnpPerPartition(:),SnpPerPartition(:,:),nSnpPerPartition(:),SnpPerPartition(:,:)
 
   real(real64) :: MeanY,VarY,SdY,VarG,VarE,Mu,nSnpR,nAnisTrR,ExpVarX,SumExpVarX,ObsVarX,SumObsVarX
-  real(real64),allocatable :: SnpTmp(:),AlleleFreq(:),ScaleCoef(:),GenosTr(:,:),PhenoTr(:,:),G(:,:)
+  real(real64),allocatable :: AlleleFreq(:),ScaleCoef(:),PhenoTr(:),G(:),GenosTr(:,:)
 
   character(len=1000) :: GenoTrFile,PhenoTrFile,Method
   character(len=1000),allocatable :: GenoTeFile(:),PhenoTeFile(:)
@@ -134,15 +136,15 @@ module AlphaBayesMod
       !write(AlleleFreqUnit,"(a11,1x,a11)") "Snp","AlleleFreq"
 
       allocate(GenosTr(nAnisTr,nSnp))
-      allocate(PhenoTr(nAnisTr,1))
-      allocate(G(nSnp,1))
+      allocate(PhenoTr(nAnisTr))
+      allocate(G(nSnp))
       allocate(AlleleFreq(nSnp))
       allocate(ScaleCoef(nSnp))
       allocate(IdTr(nAnisTr))
 
       do i=1,nAnisTr
         read(GenoTrUnit,*) DumC,GenosTr(i,:)
-        read(PhenoTrUnit,*) IdTr(i),PhenoTr(i,1)
+        read(PhenoTrUnit,*) IdTr(i),PhenoTr(i)
         if (trim(DumC).ne.trim(IdTr(i))) then
           write(STDERR,"(a)") "ERROR: Individual identifications in the genotype and phenotype files do not match in the training set"
           write(STDERR,"(a,i)") "ERROR: Line: ",i
@@ -153,10 +155,10 @@ module AlphaBayesMod
         end if
       end do
 
-      MeanY=Mean(PhenoTr(:,1))
-      VarY=Var(PhenoTr(:,1),MeanY)
+      MeanY=Mean(PhenoTr)
+      VarY=Var(PhenoTr,MeanY)
       SdY=sqrt(VarY)
-      PhenoTr(:,1)=(PhenoTr(:,1)-MeanY)/SdY
+      PhenoTr=(PhenoTr-MeanY)/SdY
 
       SumExpVarX=0.0d0
       SumObsVarX=0.0d0
@@ -249,7 +251,7 @@ module AlphaBayesMod
       ! open(newunit=PhenoTrUnit,file="PhenoTrainProcessed.txt",status="unknown")
       ! do i=1,nAnisTr
       !   write(GenoTrUnit,"("//Int2Char(nSnp)//"(1x,f20.16))") GenosTr(i,:)
-      !   write(PhenoTrUnit,*) PhenoTr(i,1)
+      !   write(PhenoTrUnit,*) PhenoTr(i)
       ! end do
       ! flush(GenoTrUnit)
       ! close(GenoTrUnit)
@@ -265,14 +267,14 @@ module AlphaBayesMod
       integer(int32) :: Iter,j,Snp,RandomOrdering(nSnp),Unit
 
       real(real64) :: ddot,VarS,Rhs,Lhs,Sol,Diff,Eps
-      real(real64),allocatable :: XpXTauE(:,:),Xg(:,:),E(:,:)
+      real(real64),allocatable :: XpXTauE(:),Xg(:),E(:),XgPartition(:)
 
-      allocate(XpXTauE(nSnp,1))
-      allocate(Xg(nAnisTr,1))
-      allocate(E(nAnisTr,1))
+      allocate(XpXTauE(nSnp))
+      allocate(Xg(nAnisTr))
+      allocate(E(nAnisTr))
 
       ! Working phenotypes
-      E(:,1)=PhenoTr(:,1)
+      E=PhenoTr
 
       ! Initialise
       Mu=0.0d0
@@ -280,9 +282,9 @@ module AlphaBayesMod
 
       ! Construct XpXTauE
       do j=1,nSnp
-        XpXTauE(j,1)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + tiny(GenosTr(1,1))
+        XpXTauE(j)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + tiny(GenosTr(1,1))
       end do
-      XpXTauE(:,1)=XpXTauE(:,1)/VarE ! can do it only once for all rounds!!!
+      XpXTauE=XpXTauE/VarE ! can do it only once for all rounds!!!
       VarS=VarG/nSnpR ! approximate variance of allele substitution effects
 
       ! Iterate
@@ -291,30 +293,32 @@ module AlphaBayesMod
 
         ! Intercept
         Lhs=nAnisTrR/VarE
-        Rhs=sum(E(:,1))/VarE + nAnisTrR*Mu/VarE
+        Rhs=sum(E)/VarE + nAnisTrR*Mu/VarE
         Sol=Rhs/Lhs
         Diff=Sol-Mu
-        E(:,1)=E(:,1)-Diff
+        E=E-Diff
         Mu=Sol
-        Eps=Eps + Diff*Diff
+        Eps=Eps+Diff*Diff
 
         ! Snp effects
         RandomOrdering=RandomOrder(nSnp)
         do j=1,nSnp
           Snp=RandomOrdering(j)
-          Lhs=XpXTauE(Snp,1) + 1.0d0/VarS
-          Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E(:,1),1)/VarE + XpXTauE(Snp,1)*G(Snp,1)
+          Lhs=XpXTauE(Snp) + 1.0d0/VarS
+          Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E,1)/VarE + XpXTauE(Snp)*G(Snp)
           Sol=Rhs/Lhs
-          Diff=Sol-G(Snp,1)
-          E(:,1)=E(:,1) - GenosTr(:,Snp)*Diff
-          G(Snp,1)=Sol
-          Eps=Eps + Diff*Diff
+          Diff=Sol-G(Snp)
+          E=E-GenosTr(:,Snp)*Diff
+          G(Snp)=Sol
+          Eps=Eps+Diff*Diff
         end do
 
         ! Recompute residuals to avoid rounding errors
         if (mod(Iter,100).eq.0) then
-          call dgemm("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Xg,nAnisTr)
-          E(:,1)=PhenoTr(:,1)-Mu-Xg(:,1)
+          ! https://software.intel.com/en-us/mkl-developer-reference-fortran-gemv
+          call gemv(A=GenosTr,x=G,y=Xg) ! y=alpha*Ax+beta*y
+          ! call dgemv("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Xg,nAnisTr)
+          E=PhenoTr-Mu-Xg
         end if
 
         ! Stopping criteria
@@ -330,7 +334,7 @@ module AlphaBayesMod
 
       open(newunit=Unit,file=SNPESTIMATEFILE,status="unknown")
       do i=1,nSnp
-        write(Unit,*) G(i,1)/ScaleCoef(i)*SdY
+        write(Unit,*) G(i)/ScaleCoef(i)*SdY
       end do
       flush(Unit)
       close(Unit)
@@ -350,14 +354,14 @@ module AlphaBayesMod
       real(real64) :: TmpR,ddot,Rhs,Lhs,Sol,Diff,nSampR
       real(real64) :: MuSamp,VarESamp,VarGSamp
       real(real64) :: R2,EDF0,EDF,GDF0,GDF,ES0,GS0,MSX,EpE,GpG
-      real(real64),allocatable :: GSamp(:,:),MuAll(:),GAll(:,:),VarEAll(:),VarGAll(:)
-      real(real64),allocatable :: SX2(:),MX2(:),XpX(:,:),Xg(:,:),E(:,:)
+      real(real64),allocatable :: GSamp(:),MuAll(:),GAll(:,:),VarEAll(:),VarGAll(:)
+      real(real64),allocatable :: SX2(:),MX2(:),XpX(:),Xg(:),E(:)
       real(real64),allocatable :: GaussDevMu(:),GaussDevSnp(:),GammaDevE(:),GammaDevG(:)
 
-      allocate(XpX(nSnp,1))
-      allocate(Xg(nAnisTr,1))
-      allocate(E(nAnisTr,1))
-      allocate(GSamp(nSnp,1))
+      allocate(XpX(nSnp))
+      allocate(Xg(nAnisTr))
+      allocate(E(nAnisTr))
+      allocate(GSamp(nSnp))
       allocate(MuAll(nIter))
       allocate(GAll(nSnp,nIter))
       allocate(VarEAll(nIter))
@@ -370,7 +374,7 @@ module AlphaBayesMod
       allocate(GammaDevG(nIter))
 
       ! Working phenotypes
-      E(:,1)=PhenoTr(:,1)
+      E=PhenoTr
 
       ! Initialise
       Mu=0.0d0
@@ -385,7 +389,7 @@ module AlphaBayesMod
       ! These prior parameters are modelled as in BGLR
       R2=0.5d0
 
-      TmpR=Var(E(:,1)) ! should be 1 if Phen is standardized
+      TmpR=Var(E) ! should be 1 if Phen is standardized
       VarESamp=TmpR*(1.0d0-R2)
       EDF0=5.0d0
       EDF=nAnisTrR+EDF0
@@ -409,7 +413,7 @@ module AlphaBayesMod
 
       ! Construct XpX
       do j=1,nSnp
-        XpX(j,1)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + tiny(GenosTr(1,1))
+        XpX(j)=ddot(nAnisTr,GenosTr(:,j),1,GenosTr(:,j),1) + tiny(GenosTr(1,1))
       end do
 
       ! Gauss and Gamma deviates
@@ -422,10 +426,10 @@ module AlphaBayesMod
       do Iter=1,nIter
         ! Intercept
         Lhs=nAnisTrR/VarESamp
-        Rhs=sum(E(:,1))/VarESamp + nAnisTrR*MuSamp/VarESamp
+        Rhs=sum(E)/VarESamp + nAnisTrR*MuSamp/VarESamp
         Sol=Rhs/Lhs + GaussDevMu(Iter)/sqrt(Lhs)
         Diff=Sol-MuSamp
-        E(:,1)=E(:,1)-Diff
+        E=E-Diff
         MuSamp=Sol
 
         ! Snp effects
@@ -434,32 +438,34 @@ module AlphaBayesMod
         do j=1,nSnp
           Snp=RandomOrdering(j)
           ! This does not work (got too big variances!), and I can not see why
-          !Lhs=XpX(Snp,1) + VarESamp/VarGSamp
-          !Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E(:,1),1) + XpX(Snp,1)*GSamp(Snp,1)
-          Lhs=XpX(Snp,1)/VarESamp + 1.0d0/VarGSamp
-          Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E(:,1),1)/VarESamp + XpX(Snp,1)*GSamp(Snp,1)/VarESamp
+          !Lhs=XpX(Snp) + VarESamp/VarGSamp
+          !Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E,1) + XpX(Snp)*GSamp(Snp)
+          Lhs=XpX(Snp)/VarESamp + 1.0d0/VarGSamp
+          Rhs=ddot(nAnisTr,GenosTr(:,Snp),1,E,1)/VarESamp + XpX(Snp)*GSamp(Snp)/VarESamp
           Sol=Rhs/Lhs + GaussDevSnp(j)/sqrt(Lhs)
-          Diff=Sol-GSamp(Snp,1)
-          E(:,1)=E(:,1) - GenosTr(:,Snp)*Diff
-          GSamp(Snp,1)=Sol
+          Diff=Sol-GSamp(Snp)
+          E=E-GenosTr(:,Snp)*Diff
+          GSamp(Snp)=Sol
         end do
 
         ! Snp variance
-        GpG=ddot(nSnp,GSamp(:,1),1,GSamp(:,1),1)+GS0
+        GpG=ddot(nSnp,GSamp,1,GSamp,1)+GS0
         VarGSamp=GpG/GammaDevG(Iter)
 
         ! Recompute residuals to avoid rounding errors
         if (mod(Iter,100).eq.0) then
-          call dgemm("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,GSamp,nSnp,ZEROR,Xg,nAnisTr)
-          E(:,1)=PhenoTr(:,1)-MuSamp-Xg(:,1)
+          ! https://software.intel.com/en-us/mkl-developer-reference-fortran-gemv
+          call gemv(A=GenosTr,x=GSamp,y=Xg) ! y=alpha*Ax+beta*y
+          ! call dgemv("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,GSamp,nSnp,ZEROR,Xg,nAnisTr)
+          E=PhenoTr-MuSamp-Xg
         end if
 
         ! Residual variance
-        EpE=ddot(nAnisTr,E(:,1),1,E(:,1),1)+ES0
+        EpE=ddot(nAnisTr,E,1,E,1)+ES0
         VarESamp=EpE/GammaDevE(Iter)
 
         MuAll(Iter)=MuSamp
-        GAll(:,Iter)=GSamp(:,1)
+        GAll(:,Iter)=GSamp
         VarEAll(Iter)=VarESamp
         VarGAll(Iter)=VarGSamp
 
@@ -468,7 +474,7 @@ module AlphaBayesMod
       ! Posterior means
       do j=nBurn+1,nIter
         Mu=Mu+MuAll(j)/nSampR
-        G(:,1)=G(:,1)+GAll(:,j)/nSampR
+        G(:)=G(:)+GAll(:,j)/nSampR
         VarE=VarE+VarEAll(j)/nSampR
         VarG=VarG+VarGAll(j)/nSampR
       end do
@@ -491,7 +497,7 @@ module AlphaBayesMod
       close(Unit)
       open(newunit=Unit,file=SNPESTIMATEFILE,status="unknown")
       do i=1,nSnp
-        write(Unit,*) G(i,1)/ScaleCoef(i)*SdY
+        write(Unit,*) G(i)/ScaleCoef(i)*SdY
       end do
       flush(Unit)
       close(Unit)
@@ -530,7 +536,7 @@ module AlphaBayesMod
 
       integer(int32) :: i,j,Pop,Unit,SummaryUnit,GenoTeUnit,PhenoTeUnit
 
-      real(real64),allocatable :: Ebv(:,:),PhenoTe(:,:),GenosTe(:,:)
+      real(real64),allocatable :: Ebv(:),PhenoTe(:),GenosTe(:,:)
 
       character(len=100) :: DumC,File
       character(len=20),allocatable :: IdTe(:)
@@ -540,31 +546,33 @@ module AlphaBayesMod
       open(newunit=SummaryUnit,file="PredictionsSummary.txt",status="unknown")
       write(SummaryUnit,"(a14,3(1x,a12),3(1x,a20))") "Set","CorsObsEst","SlopeObsEst","SlopeEstObs","CovObsEst","VarObs","VarEst"
 
-      allocate(Ebv(nAnisTr,1))
+      allocate(Ebv(nAnisTr))
 
       open(newunit=Unit,file="PredictionsForSetTrain.txt",status="unknown")
-      call dgemm("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Ebv,nAnisTr)
-      PhenoTr(:,1)=MeanY+PhenoTr(:,1)*SdY
+      ! https://software.intel.com/en-us/mkl-developer-reference-fortran-gemv
+      call gemv(A=GenosTr,x=G,y=Ebv) ! y=alpha*Ax+beta*y
+      ! call dgemv("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Ebv,nAnisTr)
+      PhenoTr=MeanY+PhenoTr*SdY
       write(Unit,"(a20,2(1x,a20))") "Id","Observed","Estimate"
       do i=1,nAnisTr
-        write(Unit,"(a20,2(1x,f20.10))") IdTr(i),PhenoTr(i,1),Ebv(i,1)
+        write(Unit,"(a20,2(1x,f20.10))") IdTr(i),PhenoTr(i),Ebv(i)
       end do
       flush(Unit)
       close(Unit)
 
-      Cors=Cor(PhenoTr(:,1),Ebv(:,1))
+      Cors=Cor(PhenoTr,Ebv)
       DumC="Train"
       write(SummaryUnit,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cors%Cor,Cors%Cov/Cors%Var2,Cors%Cov/Cors%Var1,Cors%Cov,Cors%Var1,Cors%Var2
 
       deallocate(Ebv)
 
-      G(:,1)=G(:,1)/ScaleCoef(:)*SdY
+      G(:)=G(:)/ScaleCoef(:)*SdY
 
       i=maxval(nAnisTe(:))
       allocate(IdTe(i))
       allocate(GenosTe(i,nSnp))
-      allocate(PhenoTe(i,1))
-      allocate(Ebv(i,1))
+      allocate(PhenoTe(i))
+      allocate(Ebv(i))
 
       do Pop=1,nTePop
 
@@ -573,7 +581,7 @@ module AlphaBayesMod
 
         do i=1,nAnisTe(Pop)
           read(GenoTeUnit,*) IdTe(i),GenosTe(i,:)
-          read(PhenoTeUnit,*) DumC,PhenoTe(i,1)
+          read(PhenoTeUnit,*) DumC,PhenoTe(i)
           if (trim(DumC).ne.trim(IdTe(i))) then
             write(STDERR,"(a,i)") "ERROR: Individual identifications in the genotype and phenotype files do not match in prediction set ",Pop
             write(STDERR,"(a,i)") "ERROR: Line: ",i
@@ -606,15 +614,17 @@ module AlphaBayesMod
 
         File="PredictionsForSetPredict"//Int2Char(Pop)//".txt"
         open(newunit=Unit,file=trim(File),status="unknown")
-        call dgemm("n","n",nAnisTe(Pop),1,nSnp,ONER,GenosTe(1:nAnisTe(Pop),:),nAnisTe(Pop),G,nSnp,ZEROR,Ebv(1:nAnisTe(Pop),1),nAnisTe(Pop))
+        ! https://software.intel.com/en-us/mkl-developer-reference-fortran-gemv
+        call gemv(A=GenosTe(1:nAnisTe(Pop),:),x=G,y=Ebv(1:nAnisTe(Pop))) ! y=alpha*Ax+beta*y
+        ! call dgemv("n","n",nAnisTe(Pop),1,nSnp,ONER,GenosTe(1:nAnisTe(Pop),:),nAnisTe(Pop),G,nSnp,ZEROR,Ebv(1:nAnisTe(Pop)),nAnisTe(Pop))
         write(Unit,"(a20,2(1x,a20))") "Id","Observed","Estimate"
         do i=1,nAnisTe(Pop)
-          write(Unit,"(a20,2(1x,f20.10))") IdTe(i),PhenoTe(i,1),Ebv(i,1)
+          write(Unit,"(a20,2(1x,f20.10))") IdTe(i),PhenoTe(i),Ebv(i)
         end do
         flush(Unit)
         close(Unit)
 
-        Cors=cor(PhenoTe(1:nAnisTe(Pop),1),Ebv(1:nAnisTe(Pop),1))
+        Cors=cor(PhenoTe(1:nAnisTe(Pop)),Ebv(1:nAnisTe(Pop)))
         DumC="Predict"//Int2Char(Pop)
         write(SummaryUnit,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cors%Cor,Cors%Cov/Cors%Var2,Cors%Cov/Cors%Var1,Cors%Cov,Cors%Var1,Cors%Var2
 
@@ -622,7 +632,7 @@ module AlphaBayesMod
         ! open(newunit=PhenoTeUnit,file="PhenoTest"//Int2Char(Pop)//"Processed.txt",status="unknown")
         ! do i=1,nAnisTe(Pop)
         !   write(GenoTeUnit,"("//Int2Char(nSnp)//"(1x,f20.16))") GenosTe(i,:)
-        !   write(PhenoTeUnit,*) PhenoTe(i,1)
+        !   write(PhenoTeUnit,*) PhenoTe(i)
         ! end do
         ! flush(GenoTeUnit)
         ! close(GenoTeUnit)
@@ -647,27 +657,28 @@ end module
 program AlphaBayes
 
   use ISO_Fortran_Env, STDIN=>input_unit,STDOUT=>output_unit,STDERR=>error_unit
-  use AlphaBayesMod
+  use AlphaBayesModule
   use IntelRNGMod
   implicit none
 
   real(real32) :: Start,Finish
 
-  include "mkl_vml.f90"
-
   call cpu_time(Start)
 
-  write(STDOUT,"(a)") ""
-  write(STDOUT,"(a30,a,a30)") " ","**********************"," "
-  write(STDOUT,"(a30,a,a30)") " ","*                    *"," "
-  write(STDOUT,"(a30,a,a30)") " ","*     AlphaBayes     *"," "
-  write(STDOUT,"(a30,a,a30)") " ","*                    *"," "
-  write(STDOUT,"(a30,a,a30)") " ","**********************"
-  write(STDOUT,"(a30,a,a30)") " ","VERSION:"//TOSTRING(VERS)," "
-  write(STDOUT,"(a)") ""
-  write(STDOUT,"(a35,a)")     " ","No Liability"
-  write(STDOUT,"(a25,a)")     " ","Bugs to John.Hickey@roslin.ed.ac.uk"
-  write(STDOUT,"(a)") ""
+  write(STDOUT, "(a)") ""
+  write(STDOUT, "(a)") "                            ***********************                           "
+  write(STDOUT, "(a)") "                            *                     *                           "
+  write(STDOUT, "(a)") "                            *      AlphaBayes     *                           "
+  write(STDOUT, "(a)") "                            *                     *                           "
+  write(STDOUT, "(a)") "                            ***********************                           "
+  write(STDOUT, "(a)") "                                                                              "
+  write(STDOUT, "(a)") "          Software for estimating marker effects and genomic prediction       "
+  write(STDOUT, "(a)") "                       http://AlphaGenes.Roslin.ed.ac.uk                      "
+  write(STDOUT, "(a)") "                                 No liability                                 "
+  write(STDOUT, "(a)") ""
+  write(STDOUT, "(a)") "                       Commit:   "//TOSTRING(COMMIT)//"                       "
+  write(STDOUT, "(a)") "                       Compiled: "//__DATE__//", "//__TIME__
+  write(STDOUT, "(a)") ""
 
   call IntitialiseIntelRNG
 
