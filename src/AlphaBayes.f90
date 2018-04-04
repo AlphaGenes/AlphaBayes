@@ -34,14 +34,14 @@ module AlphaBayesMod
 
   implicit none
 
-  integer(int32) :: nSnp,nSnpExternal,nAnisTr,nIter,nBurn,nProcessors,ScalingOpt,nTePop
+  integer(int32) :: nSnp,nSnpExternal,nAnisTr,nIter,nBurn,nProcessors,ScalingOpt,nPartitions,nTePop
   integer(int32),allocatable :: nAnisTe(:),FixedSnp(:),SnpPosition(:)
 
   real(real64) :: MeanY,VarY,SdY,VarG,VarE,Mu,nSnpR,nAnisTrR,ExpVarX,SumExpVarX,ObsVarX,SumObsVarX
   real(real64),allocatable :: SnpTmp(:),AlleleFreq(:),ScaleCoef(:),GenosTr(:,:),PhenoTr(:,:),G(:,:)
 
-  character(len=1000) :: GenoTrFile,PhenoTrFile,FileFixedSnp,Method
-  character(len=1000),allocatable :: GenoTeFile(:),PhenoTeFile(:)
+  character(len=1000) :: GenoTrFile,PhenoTrFile,FixedSnpFile,Method
+  character(len=1000),allocatable :: GenoTeFile(:),PhenoTeFile(:),PartitionFile(:)
   character(len=20),allocatable :: IdTr(:)
 
   REAL(REAL64),PARAMETER :: ONER=1.0d0,ZEROR=0.0d0
@@ -70,33 +70,35 @@ module AlphaBayesMod
     subroutine ReadParam
       implicit none
 
-      integer(int32) :: i,UnitSpec,UnitFixedSnp
+      integer(int32) :: i,SpecUnit,FixedSnpUnit,UnitPartitions
 
       character(len=100) :: DumC
 
-      open(newunit=UnitSpec,file=SPECFILE,status="old")
+      open(newunit=SpecUnit,file=SPECFILE,status="old")
 
-      read(UnitSpec,*) DumC,GenoTrFile
-      read(UnitSpec,*) DumC,PhenoTrFile
+      read(SpecUnit,*) DumC,GenoTrFile
+      read(SpecUnit,*) DumC,PhenoTrFile
 
-      read(UnitSpec,*) DumC,nTePop
-      allocate(PhenoTeFile(nTePop))
-      allocate(GenoTeFile(nTePop))
-      allocate(nAnisTe(nTePop))
-      read(UnitSpec,*) DumC,GenoTeFile(:)
-      read(UnitSpec,*) DumC,PhenoTeFile(:)
+      read(SpecUnit,*) DumC,nTePop
+      if (nTePop .gt. 0) then
+        allocate(PhenoTeFile(nTePop))
+        allocate(GenoTeFile(nTePop))
+        allocate(nAnisTe(nTePop))
+        read(SpecUnit,*) DumC,GenoTeFile(:)
+        read(SpecUnit,*) DumC,PhenoTeFile(:)
+      end if
 
-      read(UnitSpec,*) DumC,FileFixedSnp
-      read(UnitSpec,*) DumC,nSnpExternal
+      read(SpecUnit,*) DumC,FixedSnpFile
+      read(SpecUnit,*) DumC,nSnpExternal
 
-      if (trim(FileFixedSnp)/="None") then
-        open(newunit=UnitFixedSnp,file=trim(FileFixedSnp),status="old")
+      if (trim(FixedSnpFile)/="None") then
+        open(newunit=FixedSnpUnit,file=trim(FixedSnpFile),status="old")
         allocate(FixedSnp(nSnpExternal))
         do i=1,nSnpExternal
-          read(UnitFixedSnp,*) FixedSnp(i)
+          read(FixedSnpUnit,*) FixedSnp(i)
         end do
         nSnp=sum(FixedSnp(:))
-        close(UnitFixedSnp)
+        close(FixedSnpUnit)
       else
         nSnp=nSnpExternal
         allocate(FixedSnp(nSnpExternal))
@@ -104,28 +106,29 @@ module AlphaBayesMod
       end if
       nSnpR=dble(nSnp)
 
-      read(UnitSpec,*) DumC,nAnisTr
+      read(SpecUnit,*) DumC,nAnisTr
       nAnisTrR=dble(nAnisTr)
-      read(UnitSpec,*) DumC,nAnisTe(:)
+      read(SpecUnit,*) DumC,nAnisTe(:)
 
-      read(UnitSpec,*) DumC,nIter
-      read(UnitSpec,*) DumC,nBurn
+      read(SpecUnit,*) DumC,nIter
+      read(SpecUnit,*) DumC,nBurn
 
-      read(UnitSpec,*) DumC,VarG ! here it is meant as genetic variance!!!
-      read(UnitSpec,*) DumC,VarE
+      read(SpecUnit,*) DumC,VarG ! here it is meant as genetic variance!!!
+      read(SpecUnit,*) DumC,VarE
 
-      read(UnitSpec,*) DumC,nProcessors
+      read(SpecUnit,*) DumC,nProcessors
       call OMP_SET_NUM_THREADS(nProcessors)
 
-      read(UnitSpec,*) DumC,ScalingOpt
+      read(SpecUnit,*) DumC,ScalingOpt
       if (ScalingOpt<1 .or. ScalingOpt>5) then
         write(STDERR,"(a)") "ERROR: ScalingOption must be between 1 and 5"
         write(STDERR,"(a)") " "
         stop 1
       endif
 
-      read(UnitSpec,*) DumC,Method
-      close(UnitSpec)
+      read(SpecUnit,*) DumC,Method
+
+      close(SpecUnit)
     end subroutine
 
     !###########################################################################
@@ -133,16 +136,16 @@ module AlphaBayesMod
     subroutine ReadData
       implicit none
 
-      integer(int32) :: i,j,nNotMissing,UnitGenoTr,UnitPhenoTr!,UnitAlleleFreq
+      integer(int32) :: i,j,nNotMissing,GenoTrUnit,PhenoTrUnit!,AlleleFreqUnit
 
       character(len=100) :: DumC
 
       real(real64) :: TmpStat
 
-      open(newunit=UnitGenoTr,file=trim(GenoTrFile),status="old")
-      open(newunit=UnitPhenoTr,file=trim(PhenoTrFile),status="old")
-      !open(newunit=UnitAlleleFreq,file="AlleleFreq.txt",status="unknown")
-      !write(UnitAlleleFreq,"(a11,1x,a11)") "Snp","AlleleFreq"
+      open(newunit=GenoTrUnit,file=trim(GenoTrFile),status="old")
+      open(newunit=PhenoTrUnit,file=trim(PhenoTrFile),status="old")
+      !open(newunit=AlleleFreqUnit,file="AlleleFreq.txt",status="unknown")
+      !write(AlleleFreqUnit,"(a11,1x,a11)") "Snp","AlleleFreq"
 
       allocate(SnpTmp(nSnpExternal))
       allocate(GenosTr(nAnisTr,nSnp))
@@ -162,9 +165,9 @@ module AlphaBayesMod
       end do
 
       do i=1,nAnisTr
-        read(UnitGenoTr,*) DumC,SnpTmp(:)
+        read(GenoTrUnit,*) DumC,SnpTmp(:)
         GenosTr(i,:)=SnpTmp(SnpPosition(:))
-        read(UnitPhenoTr,*) IdTr(i),PhenoTr(i,1)
+        read(PhenoTrUnit,*) IdTr(i),PhenoTr(i,1)
         if (trim(DumC) /= trim(IdTr(i))) then
           write(STDERR,"(a)") "ERROR: Individual identifications in the genotype and phenotype files do not match in the training set"
           write(STDERR,"(a,i)") "ERROR: Line: ",i
@@ -198,7 +201,7 @@ module AlphaBayesMod
         else
           AlleleFreq(j)=0.0d0
         end if
-        !write(UnitAlleleFreq,"(i11,1x,f11.8)") j,AlleleFreq(j)
+        !write(AlleleFreqUnit,"(i11,1x,f11.8)") j,AlleleFreq(j)
 
         ! Fix any odd data
         do i=1,nAnisTr
@@ -250,18 +253,18 @@ module AlphaBayesMod
         GenosTr(:,:)=GenosTr(:,:)/ScaleCoef(1)
       end if
 
-      close(UnitGenoTr)
-      close(UnitPhenoTr)
-      !close(UnitAlleleFreq)
+      close(GenoTrUnit)
+      close(PhenoTrUnit)
+      !close(AlleleFreqUnit)
 
-      ! open(newunit=UnitGenoTr,file="GenoTrainProcessed.txt",status="unknown")
-      ! open(newunit=UnitPhenoTr,file="PhenoTrainProcessed.txt",status="unknown")
+      ! open(newunit=GenoTrUnit,file="GenoTrainProcessed.txt",status="unknown")
+      ! open(newunit=PhenoTrUnit,file="PhenoTrainProcessed.txt",status="unknown")
       ! do i=1,nAnisTr
-      !   write(UnitGenoTr,"("//Int2Char(nSnp)//"(1x,f20.16))") GenosTr(i,:)
-      !   write(UnitPhenoTr,*) PhenoTr(i,1)
+      !   write(GenoTrUnit,"("//Int2Char(nSnp)//"(1x,f20.16))") GenosTr(i,:)
+      !   write(PhenoTrUnit,*) PhenoTr(i,1)
       ! end do
-      ! close(UnitGenoTr)
-      ! close(UnitPhenoTr)
+      ! close(GenoTrUnit)
+      ! close(PhenoTrUnit)
     end subroutine
 
     !###########################################################################
@@ -269,7 +272,7 @@ module AlphaBayesMod
     subroutine RidgeRegression
       implicit none
 
-      integer(int32) :: Iter,j,Snp,RandomOrdering(nSnp),UnitVar
+      integer(int32) :: Iter,j,Snp,RandomOrdering(nSnp),Unit
 
       real(real64) :: ddot,VarS,Rhs,Lhs,Sol,Diff,Eps
       real(real64),allocatable :: XpXTauE(:,:),Xg(:,:),E(:,:)
@@ -330,14 +333,14 @@ module AlphaBayesMod
         end if
       end do
 
-      open(newunit=UnitVar,file=INTERCEPTESTIMATEFILE,status="unknown")
-      write(UnitVar,"(f20.10)") Mu*SdY
-      close(UnitVar)
-      open(newunit=UnitVar,file=SNPESTIMATEFILE,status="unknown")
+      open(newunit=Unit,file=INTERCEPTESTIMATEFILE,status="unknown")
+      write(Unit,"(f20.10)") Mu*SdY
+      close(Unit)
+      open(newunit=Unit,file=SNPESTIMATEFILE,status="unknown")
       do j=1,nSnp
-        write(UnitVar,"(f20.10)") G(j,1)*SdY
+        write(Unit,"(f20.10)") G(j,1)*SdY
       end do
-      close(UnitVar)
+      close(Unit)
 
       deallocate(XpXTauE)
       deallocate(Xg)
@@ -349,7 +352,7 @@ module AlphaBayesMod
     subroutine RidgeRegressionMCMC
       implicit none
 
-      integer(int32) :: Iter,i,j,Snp,RandomOrdering(nSnp),UnitVar
+      integer(int32) :: Iter,i,j,Snp,RandomOrdering(nSnp),Unit
 
       real(real64) :: TmpR,ddot,Rhs,Lhs,Sol,Diff,nSampR
       real(real64) :: MuSamp,VarESamp,VarGSamp
@@ -478,36 +481,36 @@ module AlphaBayesMod
       end do
 
       ! Outputs
-      open(newunit=UnitVar,file=INTERCEPTSAMPLESFILE,status="unknown")
-      write(UnitVar,*) MuAll(:)*SdY
-      close(UnitVar)
+      open(newunit=Unit,file=INTERCEPTSAMPLESFILE,status="unknown")
+      write(Unit,*) MuAll(:)*SdY
+      close(Unit)
 
-      open(newunit=UnitVar,file=SNPSAMPLESFILE,status="unknown")
+      open(newunit=Unit,file=SNPSAMPLESFILE,status="unknown")
       GaussDevSnp(:)=0.0d0 ! just a placeholder for zero output of fixed markers
       j=0
       do i=1,nSnpExternal
           if (FixedSnp(i)==1) then
             j=j+1
-            write(UnitVar,*) GAll(j,:)/ScaleCoef(j)*SdY
+            write(Unit,*) GAll(j,:)/ScaleCoef(j)*SdY
           else
-            write(UnitVar,*) GaussDevSnp(:)
+            write(Unit,*) GaussDevSnp(:)
           end if
       end do
-      close(UnitVar)
+      close(Unit)
 
-      open(newunit=UnitVar,file=RESIDUALVARIANCEESTIMATEFILE,status="unknown")
-      write(UnitVar,"(f20.10)") VarE*VarY
-      close(UnitVar)
-      open(newunit=UnitVar,file=RESIDUALVARIANCESAMPLESFILE,status="unknown")
-      write(UnitVar,*) VarEAll(:)*VarY
-      close(UnitVar)
+      open(newunit=Unit,file=RESIDUALVARIANCEESTIMATEFILE,status="unknown")
+      write(Unit,"(f20.10)") VarE*VarY
+      close(Unit)
+      open(newunit=Unit,file=RESIDUALVARIANCESAMPLESFILE,status="unknown")
+      write(Unit,*) VarEAll(:)*VarY
+      close(Unit)
 
-      open(newunit=UnitVar,file=SNPVARIANCEESTIMATEFILE,status="unknown")
-      write(UnitVar,"(f20.10)") VarG*VarY
-      close(UnitVar)
-      open(newunit=UnitVar,file=SNPVARIANCESAMPLESFILE,status="unknown")
-      write(UnitVar,*) VarGAll(:)*VarY
-      close(UnitVar)
+      open(newunit=Unit,file=SNPVARIANCEESTIMATEFILE,status="unknown")
+      write(Unit,"(f20.10)") VarG*VarY
+      close(Unit)
+      open(newunit=Unit,file=SNPVARIANCESAMPLESFILE,status="unknown")
+      write(Unit,*) VarGAll(:)*VarY
+      close(Unit)
 
       deallocate(XpX)
       deallocate(Xg)
@@ -523,7 +526,7 @@ module AlphaBayesMod
     subroutine Prediction
       implicit none
 
-      integer(int32) :: i,j,Pop,UnitSum,UnitSnpSol,UnitGenoTe,UnitPhenoTe,UnitEbv
+      integer(int32) :: i,j,Pop,Unit,SummaryUnit,GenoTeUnit,PhenoTeUnit
 
       real(real64),allocatable :: Ebv(:,:),PhenoTe(:,:),GenosTe(:,:)
 
@@ -532,24 +535,24 @@ module AlphaBayesMod
 
       type(CorrelationReal64) :: Cors
 
-      open(newunit=UnitSum,file="PredictionsSummary.txt",status="unknown")
-      write(UnitSum,"(a14,3(1x,a12),3(1x,a20))") "Set","CorsObsEst","SlopeObsEst","SlopeEstObs","CovObsEst","VarObs","VarEst"
+      open(newunit=SummaryUnit,file="PredictionsSummary.txt",status="unknown")
+      write(SummaryUnit,"(a14,3(1x,a12),3(1x,a20))") "Set","CorsObsEst","SlopeObsEst","SlopeEstObs","CovObsEst","VarObs","VarEst"
 
       allocate(Ebv(nAnisTr,1))
 
-      open(newunit=UnitEbv,file="PredictionsForSetTrain.txt",status="unknown")
+      open(newunit=Unit,file="PredictionsForSetTrain.txt",status="unknown")
       call dgemm("n","n",nAnisTr,1,nSnp,ONER,GenosTr,nAnisTr,G,nSnp,ZEROR,Ebv,nAnisTr)
       PhenoTr(:,1)=MeanY+PhenoTr(:,1)*SdY
-      write(UnitEbv,"(a20,2(1x,a20))") "Id","Observed","Estimate"
+      write(Unit,"(a20,2(1x,a20))") "Id","Observed","Estimate"
       do i=1,nAnisTr
-        write(UnitEbv,"(a20,2(1x,f20.10))") IdTr(i),PhenoTr(i,1),Ebv(i,1)
+        write(Unit,"(a20,2(1x,f20.10))") IdTr(i),PhenoTr(i,1),Ebv(i,1)
       end do
-      flush(UnitEbv)
-      close(UnitEbv)
+      flush(Unit)
+      close(Unit)
 
       Cors=Cor(PhenoTr(:,1),Ebv(:,1))
       DumC="Train"
-      write(UnitSum,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cors%Cor,Cors%Cov/Cors%Var2,Cors%Cov/Cors%Var1,Cors%Cov,Cors%Var1,Cors%Var2
+      write(SummaryUnit,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cors%Cor,Cors%Cov/Cors%Var2,Cors%Cov/Cors%Var1,Cors%Cov,Cors%Var1,Cors%Var2
 
       deallocate(Ebv)
 
@@ -568,24 +571,24 @@ module AlphaBayesMod
       G(:,1)=G(:,1)/ScaleCoef(:)*SdY
 
       ! Output
-      open(newunit=UnitSnpSol,file=INTERCEPTESTIMATEFILE,status="unknown")
-      write(UnitSnpSol,"(f20.10)") Mu
-      flush(UnitSnpSol)
-      close(UnitSnpSol)
+      open(newunit=Unit,file=INTERCEPTESTIMATEFILE,status="unknown")
+      write(Unit,"(f20.10)") Mu
+      flush(Unit)
+      close(Unit)
 
-      open(newunit=UnitSnpSol,file=SNPESTIMATEFILE,status="unknown")
-      write(UnitSnpSol,"(a20,1x,a20)") "Snp","Estimate"
+      open(newunit=Unit,file=SNPESTIMATEFILE,status="unknown")
+      write(Unit,"(a20,1x,a20)") "Snp","Estimate"
       j=0
       do i=1,nSnpExternal
           if (FixedSnp(i)==1) then
             j=j+1
-            write(UnitSnpSol,"(i20,1x,f20.10)") i,G(j,1)
+            write(Unit,"(i20,1x,f20.10)") i,G(j,1)
           else
-            write(UnitSnpSol,"(i20,1x,f20.10)") i,0.0d0
+            write(Unit,"(i20,1x,f20.10)") i,0.0d0
           end if
       end do
-      flush(UnitSnpSol)
-      close(UnitSnpSol)
+      flush(Unit)
+      close(Unit)
 
       i=maxval(nAnisTe(:))
       allocate(IdTe(i))
@@ -595,13 +598,13 @@ module AlphaBayesMod
 
       do Pop=1,nTePop
 
-        open(newunit=UnitGenoTe,file=trim(GenoTeFile(Pop)),status="old")
-        open(newunit=UnitPhenoTe,file=trim(PhenoTeFile(Pop)),status="old")
+        open(newunit=GenoTeUnit,file=trim(GenoTeFile(Pop)),status="old")
+        open(newunit=PhenoTeUnit,file=trim(PhenoTeFile(Pop)),status="old")
 
         do i=1,nAnisTe(Pop)
-          read(UnitGenoTe,*) IdTe(i),SnpTmp(:)
+          read(GenoTeUnit,*) IdTe(i),SnpTmp(:)
           GenosTe(i,:)=SnpTmp(SnpPosition(:))
-          read(UnitPhenoTe,*) DumC,PhenoTe(i,1)
+          read(PhenoTeUnit,*) DumC,PhenoTe(i,1)
           if (trim(DumC) /= trim(IdTe(i))) then
             write(STDERR,"(a,i)") "ERROR: Individual identifications in the genotype and phenotype files do not match in prediction set ",Pop
             write(STDERR,"(a,i)") "ERROR: Line: ",i
@@ -629,31 +632,31 @@ module AlphaBayesMod
           ! no need because we scaled the marker solutions
         end do
 
-        close(UnitGenoTe)
-        close(UnitPhenoTe)
+        close(GenoTeUnit)
+        close(PhenoTeUnit)
 
         File="PredictionsForSetPredict"//Int2Char(Pop)//".txt"
-        open(newunit=UnitEbv,file=trim(File),status="unknown")
+        open(newunit=Unit,file=trim(File),status="unknown")
         call dgemm("n","n",nAnisTe(Pop),1,nSnp,ONER,GenosTe(1:nAnisTe(Pop),:),nAnisTe(Pop),G,nSnp,ZEROR,Ebv(1:nAnisTe(Pop),1),nAnisTe(Pop))
-        write(UnitEbv,"(a20,2(1x,a20))") "Id","Observed","Estimate"
+        write(Unit,"(a20,2(1x,a20))") "Id","Observed","Estimate"
         do i=1,nAnisTe(Pop)
-          write(UnitEbv,"(a20,2(1x,f20.10))") IdTe(i),PhenoTe(i,1),Ebv(i,1)
+          write(Unit,"(a20,2(1x,f20.10))") IdTe(i),PhenoTe(i,1),Ebv(i,1)
         end do
-        flush(UnitEbv)
-        close(UnitEbv)
+        flush(Unit)
+        close(Unit)
 
         Cors=cor(PhenoTe(1:nAnisTe(Pop),1),Ebv(1:nAnisTe(Pop),1))
         DumC="Predict"//Int2Char(Pop)
-        write(UnitSum,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cors%Cor,Cors%Cov/Cors%Var2,Cors%Cov/Cors%Var1,Cors%Cov,Cors%Var1,Cors%Var2
+        write(SummaryUnit,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cors%Cor,Cors%Cov/Cors%Var2,Cors%Cov/Cors%Var1,Cors%Cov,Cors%Var1,Cors%Var2
 
-        ! open(newunit=UnitGenoTe,file="GenoTest"//Int2Char(Pop)//"Processed.txt",status="unknown")
-        ! open(newunit=UnitPhenoTe,file="PhenoTest"//Int2Char(Pop)//"Processed.txt",status="unknown")
+        ! open(newunit=GenoTeUnit,file="GenoTest"//Int2Char(Pop)//"Processed.txt",status="unknown")
+        ! open(newunit=PhenoTeUnit,file="PhenoTest"//Int2Char(Pop)//"Processed.txt",status="unknown")
         ! do i=1,nAnisTe(Pop)
-        !   write(UnitGenoTe,"("//Int2Char(nSnp)//"(1x,f20.16))") GenosTe(i,:)
-        !   write(UnitPhenoTe,*) PhenoTe(i,1)
+        !   write(GenoTeUnit,"("//Int2Char(nSnp)//"(1x,f20.16))") GenosTe(i,:)
+        !   write(PhenoTeUnit,*) PhenoTe(i,1)
         ! end do
-        ! close(UnitGenoTe)
-        ! close(UnitPhenoTe)
+        ! close(GenoTeUnit)
+        ! close(PhenoTeUnit)
       end do
 
       deallocate(IdTe)
@@ -661,8 +664,8 @@ module AlphaBayesMod
       deallocate(PhenoTe)
       deallocate(Ebv)
 
-      flush(UnitSum)
-      close(UnitSum)
+      flush(SummaryUnit)
+      close(SummaryUnit)
     end subroutine
 
     !###########################################################################
