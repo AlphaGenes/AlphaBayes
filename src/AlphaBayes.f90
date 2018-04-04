@@ -37,8 +37,8 @@ module AlphaBayesModule
 
   implicit none
 
-  integer(int32) :: nSnp,nAnisTr,nIter,nBurn,nProcessor,ScalingOpt,nPartition,nTePop
-  integer(int32),allocatable :: nAnisTe(:),nSnpPerPartition(:),SnpPerPartition(:,:)
+  integer(int32) :: nSnp,nAnisTr,nIter,nBurn,nProcessor,ScalingOpt,nGenoPart,nTePop
+  integer(int32),allocatable :: nAnisTe(:),nSnpPerGenoPart(:),SnpPerGenoPart(:,:)
 
   real(real64) :: MeanY,VarY,SdY,VarG,VarE,Mu,nSnpR,nAnisTrR,ExpVarX,SumExpVarX,ObsVarX,SumObsVarX
   real(real64),allocatable :: AlleleFreq(:),ScaleCoef(:),PhenoTr(:),G(:),GenosTr(:,:)
@@ -51,8 +51,8 @@ module AlphaBayesModule
 
   CHARACTER(LEN=100),PARAMETER :: SPECFILE="AlphaBayesSpec.txt"
 
-  CHARACTER(LEN=100),PARAMETER :: INTERCEPTESTIMATEFILE="InterceptEstimate.txt"
-  CHARACTER(LEN=100),PARAMETER :: INTERCEPTSAMPLESFILE="InterceptSamples.txt"
+  ! CHARACTER(LEN=100),PARAMETER :: INTERCEPTESTIMATEFILE="InterceptEstimate.txt"
+  ! CHARACTER(LEN=100),PARAMETER :: INTERCEPTSAMPLESFILE="InterceptSamples.txt"
 
   CHARACTER(LEN=100),PARAMETER :: SNPESTIMATEFILE="SnpEstimate.txt"
   CHARACTER(LEN=100),PARAMETER :: SNPSAMPLESFILE="SnpSamples.txt"
@@ -61,6 +61,10 @@ module AlphaBayesModule
   CHARACTER(LEN=100),PARAMETER :: RESIDUALVARIANCESAMPLESFILE="ResidualVarianceSamples.txt"
   CHARACTER(LEN=100),PARAMETER :: SNPVARIANCEESTIMATEFILE="SnpVarianceEstimate.txt"
   CHARACTER(LEN=100),PARAMETER :: SNPVARIANCESAMPLESFILE="SnpVarianceSamples.txt"
+
+  CHARACTER(LEN=100),PARAMETER :: GENOPARTFILESTART="GenomePartition"
+  CHARACTER(LEN=100),PARAMETER :: GENOPARTESTIMATEFILEEND="Estimate.txt"
+  CHARACTER(LEN=100),PARAMETER :: GENOPARTSAMPLESFILEEND="Samples.txt"
 
   private
   public :: AlphaBayesTitle,ReadParam,ReadData,Method,Prediction
@@ -135,6 +139,23 @@ module AlphaBayesModule
       endif
 
       read(SpecUnit,*) DumC,Method
+
+      read(SpecUnit,*) DumC,nGenoPart
+      if (nGenoPart.gt.0) then
+        allocate(nSnpPerGenoPart(nGenoPart))
+        do i=1,nGenoPart
+          read(SpecUnit,*) DumC,nSnpPerGenoPart(i)
+          ! write(STDOUT,*) i,nSnpPerGenoPart(i)
+        end do
+        allocate(SnpPerGenoPart(maxval(nSnpPerGenoPart),nGenoPart))
+        do i=1,nGenoPart
+          backspace(SpecUnit)
+        end do
+        do i=1,nGenoPart
+          read(SpecUnit,*) DumC,DumC,SnpPerGenoPart(1:nSnpPerGenoPart(i),i)
+          ! write(STDOUT,*) i,nSnpPerGenoPart(i),SnpPerGenoPart(1:nSnpPerGenoPart(i),i)
+        end do
+      end if
 
       close(SpecUnit)
     end subroutine
@@ -284,14 +305,17 @@ module AlphaBayesModule
     subroutine RidgeRegression
       implicit none
 
-      integer(int32) :: Iter,j,Snp,RandomOrdering(nSnp),Unit
+      integer(int32) :: Iter,i,j,Snp,RandomOrdering(nSnp),Unit
 
       real(real64) :: VarS,Rhs,Lhs,Sol,Diff,Eps
-      real(real64),allocatable :: XpXTauE(:),Xg(:),E(:),XgPartition(:)
+      real(real64),allocatable :: XpXTauE(:),Ebv(:),E(:),EbvGenoPart(:)
 
       allocate(XpXTauE(nSnp))
-      allocate(Xg(nAnisTr))
+      allocate(Ebv(nAnisTr))
       allocate(E(nAnisTr))
+      if (nGenoPart.gt.0) then
+        allocate(EbvGenoPart(nAnisTr))
+      end if
 
       ! Working phenotypes
       E=PhenoTr
@@ -335,8 +359,8 @@ module AlphaBayesModule
 
         ! Recompute residuals to avoid rounding errors
         if (mod(Iter,100).eq.0) then
-          call gemv(A=GenosTr,x=G,y=Xg)
-          E=PhenoTr-Mu-Xg
+          call gemv(A=GenosTr,x=G,y=Ebv)
+          E=PhenoTr-Mu-Ebv
         end if
 
         ! Stopping criteria
@@ -345,10 +369,10 @@ module AlphaBayesModule
         end if
       end do
 
-      open(newunit=Unit,file=INTERCEPTESTIMATEFILE,status="unknown")
-      write(Unit,*) Mu*SdY
-      flush(Unit)
-      close(Unit)
+      ! open(newunit=Unit,file=INTERCEPTESTIMATEFILE,status="unknown")
+      ! write(Unit,*) Mu*SdY
+      ! flush(Unit)
+      ! close(Unit)
 
       open(newunit=Unit,file=SNPESTIMATEFILE,status="unknown")
       do i=1,nSnp
@@ -357,9 +381,38 @@ module AlphaBayesModule
       flush(Unit)
       close(Unit)
 
+      if (nGenoPart.gt.0) then
+        call gemv(A=GenosTr,x=G/ScaleCoef*SdY,y=Ebv)
+        do i=1,nGenoPart
+          EbvGenoPart=0.0d0
+          ! Might have used gemv here, but for MCMC this would mean calling gemv nIter*nGenoPart times!!!
+          do j=1,nSnpPerGenoPart(i)
+            Snp=SnpPerGenoPart(j,i)
+            EbvGenoPart=EbvGenoPart+(GenosTr(:,Snp)*G(Snp)/ScaleCoef(Snp)*SdY)
+          end do
+          Ebv=Ebv-EbvGenoPart
+          open(newunit=Unit,file=trim(GENOPARTFILESTART)//trim(Int2Char(i))//trim(GENOPARTESTIMATEFILEEND),status="unknown")
+          do j=1,nAnisTr
+            write(Unit,*) EbvGenoPart(j)
+          end do
+          flush(Unit)
+          close(Unit)
+        end do
+        open(newunit=Unit,file=trim(GENOPARTFILESTART)//trim("Remainder")//trim(GENOPARTESTIMATEFILEEND),status="unknown")
+        do j=1,nAnisTr
+          write(Unit,*) Ebv(j)
+        end do
+        flush(Unit)
+        close(Unit)
+        deallocate(EbvGenoPart)
+      end if
+
       deallocate(XpXTauE)
-      deallocate(Xg)
+      deallocate(Ebv)
       deallocate(E)
+      if (nGenoPart.gt.0) then
+        deallocate(EbvGenoPart)
+      end if
     end subroutine
 
     !###########################################################################
@@ -367,29 +420,35 @@ module AlphaBayesModule
     subroutine RidgeRegressionMCMC
       implicit none
 
-      integer(int32) :: Iter,i,j,Snp,RandomOrdering(nSnp),Unit
+      integer(int32) :: Iter,i,j,Snp,RandomOrdering(nSnp),Unit,GUnit,VarGUnit,VarEUnit !,MuUnit
+      integer(int32),allocatable :: GenoPartUnit(:)
 
       real(real64) :: TmpR,Rhs,Lhs,Sol,Diff,nSampR
       real(real64) :: MuSamp,VarESamp,VarGSamp
       real(real64) :: R2,EDF0,EDF,GDF0,GDF,ES0,GS0,MSX,EpE,GpG
-      real(real64),allocatable :: GSamp(:),MuAll(:),GAll(:,:),VarEAll(:),VarGAll(:)
-      real(real64),allocatable :: SX2(:),MX2(:),XpX(:),Xg(:),E(:)
+      real(real64),allocatable :: GSamp(:)
+      real(real64),allocatable :: SX2(:),MX2(:),XpX(:),E(:),Ebv(:),EbvGenoPart(:)
       real(real64),allocatable :: GaussDevMu(:),GaussDevSnp(:),GammaDevE(:),GammaDevG(:)
 
+      character(len=100) :: GSampFmt, EbvFmt
+
+      GSampFmt="("//trim(Int2Char(nSnp))//trim("f)")
+      EbvFmt="("//trim(Int2Char(nAnisTr))//trim("f)")
+
       allocate(XpX(nSnp))
-      allocate(Xg(nAnisTr))
+      allocate(Ebv(nAnisTr))
       allocate(E(nAnisTr))
       allocate(GSamp(nSnp))
-      allocate(MuAll(nIter))
-      allocate(GAll(nSnp,nIter))
-      allocate(VarEAll(nIter))
-      allocate(VarGAll(nIter))
       allocate(SX2(nSnp))
       allocate(MX2(nSnp))
       allocate(GaussDevMu(nIter))
       allocate(GaussDevSnp(nSnp))
       allocate(GammaDevE(nIter))
       allocate(GammaDevG(nIter))
+      if (nGenoPart.gt.0) then
+        allocate(GenoPartUnit(nGenoPart+1))
+        allocate(EbvGenoPart(nAnisTr))
+      end if
 
       ! Working phenotypes
       E=PhenoTr
@@ -426,9 +485,6 @@ module AlphaBayesModule
       VarGSamp=TmpR*R2/MSX
       GS0=VarGSamp*(GDF0+2.0d0)
 
-      deallocate(SX2)
-      deallocate(MX2)
-
       ! Construct XpX
       do j=1,nSnp
         XpX(j)=dot(x=GenosTr(:,j),y=GenosTr(:,j)) + tiny(GenosTr(1,1))
@@ -438,6 +494,18 @@ module AlphaBayesModule
       GaussDevMu(:)=SampleIntelGaussD(n=nIter)
       GammaDevE(:)=SampleIntelGammaD(n=nIter,shape=EDF/2.0d0,scale=2.0d0)
       GammaDevG(:)=SampleIntelGammaD(n=nIter,shape=GDF/2.0d0,scale=2.0d0)
+
+      ! Samples files
+      ! open(newunit=MuUnit,file=INTERCEPTSAMPLESFILE,status="unknown")
+      open(newunit=GUnit,file=SNPSAMPLESFILE,status="unknown")
+      open(newunit=VarEUnit,file=RESIDUALVARIANCESAMPLESFILE,status="unknown")
+      open(newunit=VarGUnit,file=SNPVARIANCESAMPLESFILE,status="unknown")
+      if (nGenoPart.gt.0) then
+        do i=1,nGenoPart
+          open(newunit=GenoPartUnit(i),file=trim(GENOPARTFILESTART)//trim(Int2Char(i))//trim(GENOPARTSAMPLESFILEEND),status="unknown")
+        end do
+        open(newunit=GenoPartUnit(i),file=trim(GENOPARTFILESTART)//trim("Remainder")//trim(GENOPARTSAMPLESFILEEND),status="unknown")
+      end if
 
       ! Iterate
       nSampR=dble(nIter-nBurn)
@@ -449,6 +517,8 @@ module AlphaBayesModule
         Diff=Sol-MuSamp
         E=E-Diff
         MuSamp=Sol
+        ! write(MuUnit,*) MuSamp*SdY
+        Mu=Mu+MuSamp/nSampR
 
         ! Snp effects
         RandomOrdering=RandomOrder(nSnp)
@@ -462,52 +532,66 @@ module AlphaBayesModule
           E=E-GenosTr(:,Snp)*Diff
           GSamp(Snp)=Sol
         end do
+        write(GUnit,GSampFmt) GSamp/ScaleCoef*SdY
+        G=G+GSamp/nSampR
 
         ! Snp variance
         GpG=dot(x=GSamp,y=GSamp)+GS0
         VarGSamp=GpG/GammaDevG(Iter)
+        write(VarGUnit,*) VarGSamp*VarY
+        VarG=VarG+VarGSamp/nSampR
 
         ! Recompute residuals to avoid rounding errors
         if (mod(Iter,100).eq.0) then
-          call gemv(A=GenosTr,x=GSamp,y=Xg)
-          E=PhenoTr-MuSamp-Xg
+          call gemv(A=GenosTr,x=GSamp,y=Ebv)
+          E=PhenoTr-MuSamp-Ebv
         end if
 
         ! Residual variance
         EpE=dot(x=E,y=E)+ES0
         VarESamp=EpE/GammaDevE(Iter)
+        write(VarEUnit,*) VarESamp*VarY
+        VarE=VarE+VarESamp/nSampR
 
-        MuAll(Iter)=MuSamp
-        GAll(:,Iter)=GSamp
-        VarEAll(Iter)=VarESamp
-        VarGAll(Iter)=VarGSamp
+        ! Genome partitions
+        if (nGenoPart.gt.0) then
+          call gemv(A=GenosTr,x=GSamp/ScaleCoef*SdY,y=Ebv)
+          do i=1,nGenoPart
+            EbvGenoPart=0.0d0
+            ! Might have used gemv here, but for MCMC this would mean calling gemv nIter*nGenoPart times!!!
+            do j=1,nSnpPerGenoPart(i)
+              Snp=SnpPerGenoPart(j,i)
+              EbvGenoPart=EbvGenoPart+(GenosTr(:,Snp)*GSamp(Snp)/ScaleCoef(Snp)*SdY)
+            end do
+            Ebv=Ebv-EbvGenoPart
+            write(GenoPartUnit(i),EbvFmt) EbvGenoPart
+          end do
+          write(GenoPartUnit(i),EbvFmt) Ebv
+        end if
 
       end do
 
-      ! Posterior means
-      do j=nBurn+1,nIter
-        Mu=Mu+MuAll(j)/nSampR
-        G(:)=G(:)+GAll(:,j)/nSampR
-        VarE=VarE+VarEAll(j)/nSampR
-        VarG=VarG+VarGAll(j)/nSampR
-      end do
+      ! flush(MuUnit)
+      ! close(MuUnit)
+      flush(GUnit)
+      close(GUnit)
+      flush(VarGUnit)
+      close(VarGUnit)
+      flush(VarEUnit)
+      close(VarEUnit)
+      if (nGenoPart.gt.0) then
+        do i=1,nGenoPart+1
+          flush(GenoPartUnit(i))
+          close(GenoPartUnit(i))
+        end do
+      end if
 
-      ! Outputs
-      open(newunit=Unit,file=INTERCEPTSAMPLESFILE,status="unknown")
-      write(Unit,*) MuAll(:)*SdY
-      flush(Unit)
-      close(Unit)
-      open(newunit=Unit,file=INTERCEPTESTIMATEFILE,status="unknown")
-      write(Unit,*) Mu*SdY
-      flush(Unit)
-      close(Unit)
+      ! Output posterior means
+      ! open(newunit=Unit,file=INTERCEPTESTIMATEFILE,status="unknown")
+      ! write(Unit,*) Mu*SdY
+      ! flush(Unit)
+      ! close(Unit)
 
-      open(newunit=Unit,file=SNPSAMPLESFILE,status="unknown")
-      do i=1,nSnp
-        write(Unit,*) GAll(i,:)/ScaleCoef(i)*SdY
-      end do
-      flush(Unit)
-      close(Unit)
       open(newunit=Unit,file=SNPESTIMATEFILE,status="unknown")
       do i=1,nSnp
         write(Unit,*) G(i)/ScaleCoef(i)*SdY
@@ -515,31 +599,55 @@ module AlphaBayesModule
       flush(Unit)
       close(Unit)
 
-      open(newunit=Unit,file=RESIDUALVARIANCESAMPLESFILE,status="unknown")
-      write(Unit,*) VarEAll(:)*VarY
-      flush(Unit)
-      close(Unit)
       open(newunit=Unit,file=RESIDUALVARIANCEESTIMATEFILE,status="unknown")
       write(Unit,*) VarE*VarY
       flush(Unit)
       close(Unit)
 
-      open(newunit=Unit,file=SNPVARIANCESAMPLESFILE,status="unknown")
-      write(Unit,*) VarGAll(:)*VarY
-      flush(Unit)
-      close(Unit)
       open(newunit=Unit,file=SNPVARIANCEESTIMATEFILE,status="unknown")
       write(Unit,*) VarG*VarY
       flush(Unit)
       close(Unit)
 
+      if (nGenoPart.gt.0) then
+        call gemv(A=GenosTr,x=G/ScaleCoef*SdY,y=Ebv)
+        do i=1,nGenoPart
+          EbvGenoPart=0.0d0
+          ! Might have used gemv here, but for MCMC this would mean calling gemv nIter*nGenoPart times!!!
+          do j=1,nSnpPerGenoPart(i)
+            Snp=SnpPerGenoPart(j,i)
+            EbvGenoPart=EbvGenoPart+(GenosTr(:,Snp)*G(Snp)/ScaleCoef(Snp)*SdY)
+          end do
+          Ebv=Ebv-EbvGenoPart
+          open(newunit=Unit,file=trim(GENOPARTFILESTART)//trim(Int2Char(i))//trim(GENOPARTESTIMATEFILEEND),status="unknown")
+          do j=1,nAnisTr
+            write(Unit,*) EbvGenoPart(j)
+          end do
+          flush(Unit)
+          close(Unit)
+        end do
+        open(newunit=Unit,file=trim(GENOPARTFILESTART)//trim("Remainder")//trim(GENOPARTESTIMATEFILEEND),status="unknown")
+        do j=1,nAnisTr
+          write(Unit,*) Ebv(j)
+        end do
+        flush(Unit)
+        close(Unit)
+      end if
+
       deallocate(XpX)
-      deallocate(Xg)
+      deallocate(Ebv)
       deallocate(E)
-      deallocate(MuAll)
-      deallocate(GAll)
-      deallocate(VarEAll)
-      deallocate(VarGAll)
+      deallocate(GSamp)
+      deallocate(SX2)
+      deallocate(MX2)
+      deallocate(GaussDevMu)
+      deallocate(GaussDevSnp)
+      deallocate(GammaDevE)
+      deallocate(GammaDevG)
+      if (nGenoPart.gt.0) then
+        deallocate(GenoPartUnit)
+        deallocate(EbvGenoPart)
+      end if
     end subroutine
 
     !###########################################################################
@@ -681,9 +789,15 @@ program AlphaBayes
   call ReadParam
   call ReadData
   if (trim(Method).eq."Ridge") then
+    write(STDOUT, "(a)") ""
+    write(STDOUT, "(a)") "Running estimation of marker effects with provided variance components"
+    write(STDOUT, "(a)") ""
     call RidgeRegression
   end if
   if (trim(Method).eq."RidgeMCMC") then
+    write(STDOUT, "(a)") ""
+    write(STDOUT, "(a)") "Running estimation of marker effects and variance components with MCMC"
+    write(STDOUT, "(a)") ""
     call RidgeRegressionMCMC
   end if
   call Prediction
