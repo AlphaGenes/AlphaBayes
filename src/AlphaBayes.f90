@@ -63,10 +63,30 @@ module AlphaBayesModule
   CHARACTER(LEN=100),PARAMETER :: SNPVARIANCESAMPLESFILE="SnpVarianceSamples.txt"
 
   private
-  public :: ReadParam,ReadData,Method,Prediction
+  public :: AlphaBayesTitle,ReadParam,ReadData,Method,Prediction
   public :: RidgeRegression,RidgeRegressionMCMC
 
   contains
+
+    !###########################################################################
+
+    subroutine AlphaBayesTitle
+      implicit none
+      write(STDOUT, "(a)") ""
+      write(STDOUT, "(a)") "                            ***********************                           "
+      write(STDOUT, "(a)") "                            *                     *                           "
+      write(STDOUT, "(a)") "                            *      AlphaBayes     *                           "
+      write(STDOUT, "(a)") "                            *                     *                           "
+      write(STDOUT, "(a)") "                            ***********************                           "
+      write(STDOUT, "(a)") "                                                                              "
+      write(STDOUT, "(a)") "          Software for estimating marker effects and genomic prediction       "
+      write(STDOUT, "(a)") "                       http://AlphaGenes.Roslin.ed.ac.uk                      "
+      write(STDOUT, "(a)") "                                 No liability                                 "
+      write(STDOUT, "(a)") ""
+      write(STDOUT, "(a)") "                       Commit:   "//TOSTRING(COMMIT)//"                       "
+      write(STDOUT, "(a)") "                       Compiled: "//__DATE__//", "//__TIME__
+      write(STDOUT, "(a)") ""
+    end subroutine
 
     !###########################################################################
 
@@ -646,28 +666,15 @@ end module
 program AlphaBayes
 
   use ISO_Fortran_Env, STDIN=>input_unit,STDOUT=>output_unit,STDERR=>error_unit
+  use AlphaHouseMod, only : PrintElapsedTime
   use AlphaBayesModule
   use IntelRNGMod
   implicit none
 
-  real(real32) :: Start,Finish
+  real(real32) :: StartTime, EndTime
 
-  call cpu_time(Start)
-
-  write(STDOUT, "(a)") ""
-  write(STDOUT, "(a)") "                            ***********************                           "
-  write(STDOUT, "(a)") "                            *                     *                           "
-  write(STDOUT, "(a)") "                            *      AlphaBayes     *                           "
-  write(STDOUT, "(a)") "                            *                     *                           "
-  write(STDOUT, "(a)") "                            ***********************                           "
-  write(STDOUT, "(a)") "                                                                              "
-  write(STDOUT, "(a)") "          Software for estimating marker effects and genomic prediction       "
-  write(STDOUT, "(a)") "                       http://AlphaGenes.Roslin.ed.ac.uk                      "
-  write(STDOUT, "(a)") "                                 No liability                                 "
-  write(STDOUT, "(a)") ""
-  write(STDOUT, "(a)") "                       Commit:   "//TOSTRING(COMMIT)//"                       "
-  write(STDOUT, "(a)") "                       Compiled: "//__DATE__//", "//__TIME__
-  write(STDOUT, "(a)") ""
+  call cpu_time(StartTime)
+  call AlphaBayesTitle
 
   call IntitialiseIntelRNG
 
@@ -683,10 +690,10 @@ program AlphaBayes
 
   call UnintitialiseIntelRNG
 
-  call cpu_time(Finish)
+  call cpu_time(EndTime)
+  !call AlphaBayesTitle
+  call PrintElapsedTime(StartTime, EndTime)
 
-  write(STDOUT,"(a,f20.4,a)") "Time duration of AlphaBayes: ",Finish-Start," seconds"
-  write(STDOUT,"(a)") " "
 end program
 
 !###############################################################################
