@@ -1,34 +1,60 @@
-#ifdef BINARY
-#define BINFILE ,form="unformatted"
-#else
-#define BINFILE
-#endif
+#ifdef _WIN32
 
-#define STRINGIFY(x) #x
+#define STRINGIFY(x)#x
 #define TOSTRING(x) STRINGIFY(x)
 
-#ifdef OS_UNIX
+#define DASH "\"
+#define COPY "copy"
+#define MD "md"
+#define RMDIR "RMDIR /S /Q"
+#define RM "del"
+#define RENAME "MOVE /Y"
+#define SH "BAT"
+#define EXE ".exe"
+#define NULL " >NUL"
+
+#else
+
+#define STRINGIFY(x)#x
+#define TOSTRING(x) STRINGIFY(x)
+
 #define DASH "/"
 #define COPY "cp"
-#define MKDIR "mkdir -p"
+#define MD "mkdir"
 #define RMDIR "rm -r"
 #define RM "rm"
 #define RENAME "mv"
-#else
-#define DASH "\"
-#define COPY "copy"
-#define MKDIR "md"
-#define RMDIR "rmdir /S"
-#define RM "del"
-#define RENAME "move /Y"
+#define SH "sh"
+#define EXE ""
+#define NULL ""
+
 #endif
 
 !###############################################################################
 
+!-------------------------------------------------------------------------------
+! The Roslin Institute, The University of Edinburgh - AlphaGenes Group
+!-------------------------------------------------------------------------------
+!
+!> @file     AlphaBayesModule.f90
+!
+! DESCRIPTION:
+!> @brief    Genome-wide marker regression
+!
+!> @details  Genome-wide marker regression
+!
+!> @author   Gregor Gorjanc, gregor.gorjanc@roslin.ed.ac.uk
+!
+!> @date     2018-04-05
+!
+!> @version  0.1.0 (alpha)
+!
+!-------------------------------------------------------------------------------
 module AlphaBayesModule
 
   use ISO_Fortran_Env, STDIN=>input_unit,STDOUT=>output_unit,STDERR=>error_unit
   use IntelRNGMod
+  use ConstantModule, only : FILELENGTH, SPECOPTIONLENGTH, IDLENGTH
   use AlphaHouseMod
   use AlphaStatMod
   use Blas95, only : dot, & ! https://software.intel.com/en-us/mkl-developer-reference-fortran-dot  dot(x,y) does x'y
@@ -37,16 +63,22 @@ module AlphaBayesModule
 
   implicit none
 
-  integer(int32) :: nSnp,nAnisTr,nIter,nBurn,nProcessor,ScalingOpt,nGenoPart,nTePop
+  private
+  ! Functions
+  public :: AlphaBayesTitle,ReadParam,ReadData,Analysis,Prediction
+
+  ! Module global variables :(((
+  integer(int32) :: nSnp,nAnisTr,nIter,nBurn,nProcessor,GenoScaleMethod,nGenoPart,nTePop
   integer(int32),allocatable :: nAnisTe(:),nSnpPerGenoPart(:),SnpPerGenoPart(:,:)
 
   real(real64) :: MeanY,VarY,SdY,VarG,VarE,Mu,nSnpR,nAnisTrR,ExpVarX,SumExpVarX,ObsVarX,SumObsVarX
   real(real64),allocatable :: AlleleFreq(:),ScaleCoef(:),PhenoTr(:),G(:),GenosTr(:,:),E(:),XpX(:)
 
-  character(len=1000) :: GenoTrFile,PhenoTrFile,Method
-  character(len=1000),allocatable :: GenoTeFile(:),PhenoTeFile(:)
-  character(len=20),allocatable :: IdTr(:)
+  character(len=FILELENGTH) :: GenoTrFile,PhenoTrFile,EstimationMethod
+  character(len=FILELENGTH),allocatable :: GenoTeFile(:),PhenoTeFile(:),GenoPartFile(:)
+  character(len=IDLENGTH),allocatable :: IdTr(:)
 
+  ! Module parameters
   REAL(REAL64),PARAMETER :: ONER=1.0d0,ZEROR=0.0d0
 
   CHARACTER(LEN=100),PARAMETER :: SPECFILE="AlphaBayesSpec.txt"
@@ -65,10 +97,6 @@ module AlphaBayesModule
   CHARACTER(LEN=100),PARAMETER :: GENOPARTFILESTART="GenomePartition"
   CHARACTER(LEN=100),PARAMETER :: GENOPARTESTIMATEFILEEND="Estimate.txt"
   CHARACTER(LEN=100),PARAMETER :: GENOPARTSAMPLESFILEEND="Samples.txt"
-
-  private
-  public :: AlphaBayesTitle,ReadParam,ReadData,Method,Prediction
-  public :: RidgeRegression,RidgeRegressionMCMC
 
   contains
 
@@ -97,67 +125,296 @@ module AlphaBayesModule
     subroutine ReadParam
       implicit none
 
-      integer(int32) :: i,SpecUnit
+      integer(int32) :: i, SpecUnit, Stat, GTePop, PTePop, nAnisTeI, GenoPart
+      logical :: LogStdoutInternal
+      character(len=:), allocatable :: DumString
+      character(len=SPECOPTIONLENGTH) :: Line
+      character(len=SPECOPTIONLENGTH) :: First
+      character(len=SPECOPTIONLENGTH), allocatable, dimension(:) :: Second
 
-      character(len=100) :: DumC
+      open(newunit=SpecUnit, file=SPECFILE, status="old")
 
-      open(newunit=SpecUnit,file=SPECFILE,status="old")
+      ! Defaults
+      LogStdoutInternal = .true.
+      nTePop = 0
+      GTePop = 0
+      PTePop = 0
+      nAnisTr = 0
+      nAnisTeI = 0
+      nIter = 10000
+      nBurn = 1000
+      VarG = 0.5
+      VarE = 0.5
+      nProcessor = 1
+      GenoScaleMethod = 4
+      EstimationMethod = "Ridge"
+      nGenoPart = 0
+      GenoPart = 0
 
-      read(SpecUnit,*) DumC,GenoTrFile
-      read(SpecUnit,*) DumC,PhenoTrFile
+      ! Process spec file
+      Stat = 0
+      ReadSpec: do while (Stat .eq. 0)
+        read(SpecUnit, "(a)", iostat=Stat) Line
+        if (len_trim(Line) .eq. 0) then
+          cycle
+        end if
+        call SplitLineIntoTwoParts(trim(adjustl(Line)), First, Second)
+        DumString = ParseToFirstWhitespace(First)
+        ! @todo why (len_trim(Line) .eq. 0)? if we use (len_trim(Line) .eq. 0) above
+        if (First(1:1) .eq. "=" .or. len_trim(Line) .eq. 0) then
+          cycle
+        else
+          select case (ToLower(trim(DumString)))
+            ! Inputs
+            case ("genotypetrainfile")
+              if (allocated(Second)) then
+                write(GenoTrFile, *) trim(adjustl(Second(1)))
+                GenoTrFile = adjustl(GenoTrFile)
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Genotype train file: "//trim(GenoTrFile)
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a file for GenotypeTrainFile, i.e., GenotypeTrainFile, GenotypesTrain.txt"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
 
-      read(SpecUnit,*) DumC,nTePop
-      if (nTePop.gt.0) then
-        allocate(PhenoTeFile(nTePop))
-        allocate(GenoTeFile(nTePop))
-        allocate(nAnisTe(nTePop))
-        read(SpecUnit,*) DumC,GenoTeFile(:)
-        read(SpecUnit,*) DumC,PhenoTeFile(:)
-      end if
+            case ("phenotypetrainfile")
+              if (allocated(Second)) then
+                write(PhenoTrFile, *) trim(adjustl(Second(1)))
+                PhenoTrFile = adjustl(PhenoTrFile)
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Phenotype train file: "//trim(PhenoTrFile)
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a file for PhenotypeTrainFile, i.e., PhenotypeTrainFile, PhenotypesTrain.txt"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
 
-      read(SpecUnit,*) DumC,nSnp
-      nSnpR=dble(nSnp)
+            case ("numberofpredictionsets")
+              if (allocated(Second)) then
+                if (ToLower(trim(adjustl(Second(1)))) .ne. "0") then
+                  nTePop = Char2Int(trim(adjustl(Second(1))))
+                  allocate(PhenoTeFile(nTePop))
+                  allocate(GenoTeFile(nTePop))
+                  allocate(nAnisTe(nTePop))
+                  nAnisTe = 0
+                  if (LogStdoutInternal) then
+                    write(STDOUT, "(a)") " Number of prediction sets: "//trim(Int2Char(nTePop))
+                  end if
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfPredictionSets, i.e., NumberOfPredictionSets, 2"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
 
-      read(SpecUnit,*) DumC,nAnisTr
-      nAnisTrR=dble(nAnisTr)
-      read(SpecUnit,*) DumC,nAnisTe(:)
+            case ("genotypepredictfile")
+              if (allocated(Second)) then
+                GTePop = GTePop + 1
+                write(GenoTeFile(GTePop), *) trim(adjustl(Second(1)))
+                GenoTeFile(GTePop) = adjustl(GenoTeFile(GTePop))
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Genotype predict file: "//trim(GenoTeFile(GTePop))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a file for GenotypePredictFile, i.e., GenotypePredictFile, GenotypesPredict.txt"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
 
-      read(SpecUnit,*) DumC,nIter
-      read(SpecUnit,*) DumC,nBurn
+            case ("phenotypepredictfile")
+              if (allocated(Second)) then
+                PTePop = PTePop + 1
+                write(PhenoTeFile(PTePop), *) trim(adjustl(Second(1)))
+                PhenoTeFile(PTePop) = adjustl(PhenoTeFile(PTePop))
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Phenotype predict file: "//trim(PhenoTeFile(PTePop))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a file for PhenotypePredictFile, i.e., PhenotypePredictFile, PhenotypesPredict.txt"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
 
-      read(SpecUnit,*) DumC,VarG ! here it is meant as genetic variance!!!
-      read(SpecUnit,*) DumC,VarE
+            case ("numberofmarkers")
+              if (allocated(Second)) then
+                nSnp = Char2Int(trim(adjustl(Second(1))))
+                nSnpR = dble(nSnp)
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Number of markers: "//trim(Int2Char(nSnp))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfMarkers, i.e., NumberOfMarkers, 100"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
 
-      read(SpecUnit,*) DumC,nProcessor
-      call OMP_SET_NUM_THREADS(nProcessor)
+            case ("numberoftrainindividuals")
+              if (allocated(Second)) then
+                nAnisTr = Char2Int(trim(adjustl(Second(1))))
+                nAnisTrR = dble(nAnisTr)
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Number of train individuals: "//trim(Int2Char(nAnisTr))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfTrainIndividuals, i.e., NumberOfTrainIndividuals, 100"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
 
-      read(SpecUnit,*) DumC,ScalingOpt
-      if (ScalingOpt.lt.1.or.ScalingOpt.gt.5) then
-        write(STDERR,"(a)") "ERROR: ScalingOption must be between 1 and 5"
-        write(STDERR,"(a)") " "
-        stop 1
-      endif
+            case ("numberofpredictionindividuals")
+              if (allocated(Second)) then
+                nAnisTeI = nAnisTeI + 1
+                nAnisTe(nAnisTeI) = Char2Int(trim(adjustl(Second(1))))
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Number of prediction individuals: "//trim(Int2Char(nAnisTe(nAnisTeI)))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfPredictionIndividuals, i.e., NumberOfPredictionIndividuals, 100"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
 
-      read(SpecUnit,*) DumC,Method
+            case ("numberofiterations")
+              if (allocated(Second)) then
+                nIter = Char2Int(trim(adjustl(Second(1))))
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Number of iterations: "//trim(Int2Char(nIter))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfIterations, i.e., NumberOfIterations, 10000"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
 
-      read(SpecUnit,*) DumC,nGenoPart
-      if (nGenoPart.gt.0) then
-        allocate(nSnpPerGenoPart(nGenoPart))
-        do i=1,nGenoPart
-          read(SpecUnit,*) DumC,nSnpPerGenoPart(i)
-          ! write(STDOUT,*) i,nSnpPerGenoPart(i)
-        end do
-        allocate(SnpPerGenoPart(maxval(nSnpPerGenoPart),nGenoPart))
-        do i=1,nGenoPart
-          backspace(SpecUnit)
-        end do
-        do i=1,nGenoPart
-          read(SpecUnit,*) DumC,DumC,SnpPerGenoPart(1:nSnpPerGenoPart(i),i)
-          ! write(STDOUT,*) i,nSnpPerGenoPart(i),SnpPerGenoPart(1:nSnpPerGenoPart(i),i)
-        end do
-      end if
+            case ("numberofburniniterations")
+              if (allocated(Second)) then
+                nBurn = Char2Int(trim(adjustl(Second(1))))
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Number of burn-in iterations: "//trim(Int2Char(nBurn))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfBurnInIterations, i.e., NumberOfBurnInIterations, 1000"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
 
+            case ("geneticvariance")
+              if (allocated(Second)) then
+                VarG = Char2Double(trim(adjustl(Second(1))))
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Genetic variance: "//trim(Real2Char(VarG))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a value for GeneticVariance, i.e., GeneticVariance, 0.5"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("residualvariance")
+              if (allocated(Second)) then
+                VarE = Char2Double(trim(adjustl(Second(1))))
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Residual variance: "//trim(Real2Char(VarE))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a value for ResidualVariance, i.e., ResidualVariance, 0.5"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("numberofprocessors")
+              if (allocated(Second)) then
+                nProcessor = Char2Int(trim(adjustl(Second(1))))
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Number of burn-in iterations: "//trim(Int2Char(nProcessor))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfProcessors, i.e., NumberOfProcessors, 4"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("genotypescalingmethod")
+              if (allocated(Second)) then
+                GenoScaleMethod = Char2Int(trim(adjustl(Second(1))))
+                if (GenoScaleMethod .lt. 1 .or. GenoScaleMethod .gt. 5) then
+                  write(STDERR,"(a)") " ERROR: GenotypeScalingMethod must be between 1 and 5"
+                  write(STDERR,"(a)") " "
+                  stop 1
+                endif
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Genotype scaling method: "//trim(Int2Char(GenoScaleMethod))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a value for GenotypeScalingMethod, i.e., GenotypeScalingMethod, 4"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("estimationmethod")
+              if (allocated(Second)) then
+                write(EstimationMethod, *) trim(adjustl(Second(1)))
+                EstimationMethod = adjustl(EstimationMethod)
+                if (trim(EstimationMethod) .eq. "Ridge" .or. trim(EstimationMethod) .eq. "RidgeMCMC") then
+                  write(STDERR,"(a)") " ERROR: EstimationMethod must be either Ridge or RidgeMCMC"
+                  write(STDERR,"(a)") " "
+                  stop 1
+                endif
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Estimation method: "//trim(EstimationMethod)
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a string for EstimationMethod, i.e., EstimationMethod, Ridge"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("numberofgenomepartitions")
+              if (allocated(Second)) then
+                nGenoPart = Char2Int(trim(adjustl(Second(1))))
+                allocate(GenoPartFile(nGenoPart))
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Number of genome partitions: "//trim(Int2Char(nGenoPart))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfGenomePartitions, i.e., NumberOfGenomePartitions, 4"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("genomepartitionfile")
+              if (allocated(Second)) then
+                GenoPart = GenoPart + 1
+                write(GenoPartFile(GenoPart), *) trim(adjustl(Second(1)))
+                GenoPartFile(GenoPart) = adjustl(GenoPartFile(GenoPart))
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Genome partition file: "//trim(GenoPartFile(GenoPart))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a file for GenomePartitionFile, i.e., GenomePartitionFile, Partition1.txt"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+              case ("stop")
+              if (LogStdoutInternal) then
+                write(STDOUT, "(3a)") " NOTE: Encountered Stop specification - the rest of specifications will be ignored"
+              end if
+              exit
+
+            case default
+              if (LogStdoutInternal) then
+                write(STDOUT, "(a)") " NOTE: Specification '"//trim(Line)//"' was ignored"
+                write(STDOUT, "(a)") " "
+              end if
+          end select
+        end if
+      end do ReadSpec
       close(SpecUnit)
+      call OMP_SET_NUM_THREADS(nProcessor)
     end subroutine
 
     !###########################################################################
@@ -241,14 +498,14 @@ module AlphaBayesModule
         ! ... scale
         ScaleCoef(j)=1.0d0
 
-        if (ScalingOpt.eq.2) then
+        if (GenoScaleMethod.eq.2) then
           ! Scale by marker specific variance - expected
           ExpVarX=sqrt(ExpVarX)
           ScaleCoef(j)=ExpVarX
           GenosTr(:,j)=GenosTr(:,j)/ScaleCoef(j)
         end if
 
-        if (ScalingOpt.eq.3) then
+        if (GenoScaleMethod.eq.3) then
           ! Scale by marker specific variance - observed
           ObsVarX=sqrt(ObsVarX)
           ScaleCoef(j)=ObsVarX
@@ -257,14 +514,14 @@ module AlphaBayesModule
 
       end do
 
-      if (ScalingOpt.eq.4) then
+      if (GenoScaleMethod.eq.4) then
         ! Scale by average marker variance - expected
         ExpVarX=sqrt(SumExpVarX/nSnpR)
         ScaleCoef(:)=ExpVarX
         GenosTr(:,:)=GenosTr(:,:)/ScaleCoef(1)
       end if
 
-      if (ScalingOpt.eq.5) then
+      if (GenoScaleMethod.eq.5) then
         ! Scale by average marker variance - observed
         ObsVarX=sqrt(SumObsVarX/nSnpR)
         ScaleCoef(:)=ObsVarX
@@ -299,6 +556,24 @@ module AlphaBayesModule
       ! flush(PhenoTrUnit)
       ! close(PhenoTrUnit)
 
+! TODO
+! if (nGenoPart.gt.0) then
+!   allocate(nSnpPerGenoPart(nGenoPart))
+!   do i=1,nGenoPart
+!     read(SpecUnit,*) DumC,nSnpPerGenoPart(i)
+!     ! write(STDOUT,*) i,nSnpPerGenoPart(i)
+!   end do
+!   allocate(SnpPerGenoPart(maxval(nSnpPerGenoPart),nGenoPart))
+!   do i=1,nGenoPart
+!     backspace(SpecUnit)
+!   end do
+!   do i=1,nGenoPart
+!     read(SpecUnit,*) DumC,DumC,SnpPerGenoPart(1:nSnpPerGenoPart(i),i)
+!     ! write(STDOUT,*) i,nSnpPerGenoPart(i),SnpPerGenoPart(1:nSnpPerGenoPart(i),i)
+!   end do
+! end if
+
+
       ! Here as both RidgeRegression and RidgeRegressionMCMC use them
       allocate(E(nAnisTr))
       allocate(XpX(nSnp))
@@ -307,6 +582,25 @@ module AlphaBayesModule
       do j=1,nSnp
         XpX(j)=dot(x=GenosTr(:,j),y=GenosTr(:,j)) + tiny(GenosTr(1,1))
       end do
+    end subroutine
+
+    !###########################################################################
+
+    subroutine Analysis
+      implicit none
+      if (trim(EstimationMethod).eq."Ridge") then
+        write(STDOUT, "(a)") ""
+        write(STDOUT, "(a)") " Running estimation of marker effects with provided variance components"
+        write(STDOUT, "(a)") ""
+        call RidgeRegression
+      end if
+      if (trim(EstimationMethod).eq."RidgeMCMC") then
+        write(STDOUT, "(a)") ""
+        write(STDOUT, "(a)") " Running estimation of marker effects and variance components with MCMC"
+        write(STDOUT, "(a)") ""
+        call RidgeRegression
+        call RidgeRegressionMCMC
+      end if
     end subroutine
 
     !###########################################################################
@@ -386,7 +680,7 @@ module AlphaBayesModule
       close(Unit)
 
       ! Recalculate Ebv and residuals for later use
-      if (nGenoPart.gt.0.or.Method.eq."RidgeMCMC") then
+      if (nGenoPart.gt.0.or.EstimationMethod.eq."RidgeMCMC") then
         call gemv(A=GenosTr,x=G/ScaleCoef*SdY,y=Ebv)
         E=PhenoTr-Mu-Ebv
       end if
@@ -791,28 +1085,12 @@ program AlphaBayes
 
   call cpu_time(StartTime)
   call AlphaBayesTitle
-
   call IntitialiseIntelRNG
-
   call ReadParam
   call ReadData
-  if (trim(Method).eq."Ridge") then
-    write(STDOUT, "(a)") ""
-    write(STDOUT, "(a)") "Running estimation of marker effects with provided variance components"
-    write(STDOUT, "(a)") ""
-    call RidgeRegression
-  end if
-  if (trim(Method).eq."RidgeMCMC") then
-    write(STDOUT, "(a)") ""
-    write(STDOUT, "(a)") "Running estimation of marker effects and variance components with MCMC"
-    write(STDOUT, "(a)") ""
-    call RidgeRegression
-    call RidgeRegressionMCMC
-  end if
+  call Analysis
   call Prediction
-
   call UnintitialiseIntelRNG
-
   call cpu_time(EndTime)
   !call AlphaBayesTitle
   call PrintElapsedTime(StartTime, EndTime)

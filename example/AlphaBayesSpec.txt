@@ -1,10 +1,13 @@
-GenotypeTraining   ,GenoTrain.csv
-PhenotypeTraining  ,PhenoTrain.csv
+GenotypeTrainFile        , GenoTrain.csv
+PhenotypeTrainFile       , PhenoTrain.csv
+NumberOfMarkers          , 2920
+NumberOfTrainIndividuals , 215
+Stop
+
 nTestPopulations   ,2
 GenotypeTesting    ,GenoTest1.csv,GenoTest2.csv
 PhenotypeTesting   ,PhenoTest1.csv,PhenoTest2.csv
-nSnp               ,2920
-nAnisTr            ,215
+
 nAnisTe            ,100,100
 nRound             ,1000
 nBurn              ,100
