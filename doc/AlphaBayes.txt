@@ -85,7 +85,7 @@ GenotypeTrainFile
   GenotypeTrainFile , [String]
   GenotypeTrainFile , GenotypeTrain.txt
 
-GenotypeTrainFile specifies a file that contains marker genotypes used in training. The file should have *1 + nM* columns, where the first column are individual identifications and *nM* is number of markers and *nR* rows, where *nR* is number of records. See `NumberOfMarkers_` and `NumberOfTrainRecords_` to specify these dimensions. Valid genotype values (genotype dosages) are between 0 and 2 (usually 0, 1, or 2, but values in between are valid too). Any value outside this range is assumed as a missing genotype and is replaced by an average genotype (marker specific). An example for four individuals genotyped at 3 markers is:
+GenotypeTrainFile specifies a file that contains marker genotypes used in training. The file should have *1 + nM* columns, where the first column are individual identifications and *nM* is number of markers and *nR* rows, where *nR* is number of records. See `NumberOfMarkers_` and `NumberOfTrainRecords_` to specify these dimensions. Columns can be separated by space, tab, or comma. Valid genotype values (genotype dosages) are between 0 and 2 (usually 0, 1, or 2, but values in between are valid too). Any value outside this range is assumed as a missing genotype and is replaced by an average genotype (marker specific). An example for four individuals genotyped at 3 markers is:
 
 ::
 
@@ -102,7 +102,7 @@ PhenotypeTrainFile
   PhenotypeTrainFile , [String]
   PhenotypeTrainFile , PhenotypeTrain.txt
 
-PhenotypeTrainFile specifies a file that contains phenotypes used in training. The file should have *1 + 1* columns, where the first column are individual identifications and the second column are phenotype values, and *nR* rows, where *nR* is number of records. Phenotype values should be numeric and not control is given about it! An example for four individuals phenotyped is:
+PhenotypeTrainFile specifies a file that contains phenotypes used in training. The file should have *1 + 1* columns, where the first column are individual identifications and the second column are phenotype values, and *nR* rows, where *nR* is number of records. See `NumberOfTrainRecords_` to specify number of records. Columns can be separated by space, tab, or comma. Phenotype values should be numeric and not control is given about it! An example for four individuals phenotyped is:
 
 ::
 
@@ -129,7 +129,7 @@ GenotypePredictFile
   GenotypePredictFile , [String]
   GenotypePredictFile , GenotypePredict.txt
 
-GenotypePredictFile specifies a file that contains marker genotypes used in prediction. See `GenotypeTrainFile`_ for format details. This is for one prediction set. In case there are several prediction sets set `NumberOfPredictSets_` and use several GenotypePredictFile specifications, e.g., for two prediction sets use:
+GenotypePredictFile specifies a file that contains marker genotypes used in prediction. See `GenotypeTrainFile`_ for file format details. See `NumberOfpredictRecords_` to specify number of records. In case there are several prediction sets set `NumberOfPredictSets_` and use several GenotypePredictFile specifications, e.g., for two prediction sets use:
 
 ::
 
@@ -144,7 +144,7 @@ PhenotypePredictFile
   PhenotypePredictFile , [String]
   PhenotypePredictFile , PhenotypePredict.txt
 
-PhenotypePredictFile specifies a file that contains phenotypes used in prediction. See `PhenotypeTrainFile`_ for format details. This is for one prediction set. In case there are several prediction sets use several PhenotypePredictFile specifications, e.g., for two prediction sets use:
+PhenotypePredictFile specifies a file that contains phenotypes used in prediction. See `PhenotypeTrainFile`_ for file format details. See `NumberOfpredictRecords_` to specify number of records. In case there are several prediction sets use several PhenotypePredictFile specifications, e.g., for two prediction sets use:
 
 ::
 
@@ -169,7 +169,7 @@ NumberOfTrainRecords
   NumberOfTrainRecords , [Value]
   NumberOfTrainRecords , 100
 
-NumberOfTrainRecords specifies the number of training records used. When this specification is not given all records in training files are used.
+NumberOfTrainRecords specifies the number of training records used in `GenotypeTrainFile_` and `PhenotypeTrainFile_`. When this specification is not given all records in training files are used.
 
 NumberOfPredictRecords
 ----------------------
@@ -179,7 +179,7 @@ NumberOfPredictRecords
   NumberOfPredictRecords , [Value]
   NumberOfPredictRecords , 100
 
-NumberOfPredictRecords specifies the number of prediction records used. When this specification is not given all records in prediction files are used. In case there are several prediction sets use several NumberOfPredictRecords specifications, e.g., for two prediction sets use:
+NumberOfPredictRecords specifies the number of prediction records used in `GenotypePredictFile_` and `PhenotypePredictFile_`. When this specification is not given all records in prediction files are used. In case there are several prediction sets use several NumberOfPredictRecords specifications, e.g., for two prediction sets use:
 
 ::
 
@@ -326,8 +326,8 @@ Stop ends the specification file. Any specifications following Stop are ignored.
 Output files
 =========================================================================================
 
-TODO
-----
+PredictionsForSet*.txt
+----------------------
 
 TODO.
 
@@ -335,6 +335,20 @@ TODO.
 
   TODO
   ...
+
+PredictionsSummary.txt
+ResidualVarianceEstimate.txt
+ResidualVarianceSamples.txt
+SnpEstimate.txt
+SnpSamples.txt
+SnpVarianceEstimate.txt
+SnpVarianceSamples.txt
+
+GenomePartition1Estimate.txt
+GenomePartition1Samples.txt
+
+GenomePartitionRemainderEstimate.txt
+GenomePartitionRemainderSamples.txt
 
 Examples
 =========================================================================================

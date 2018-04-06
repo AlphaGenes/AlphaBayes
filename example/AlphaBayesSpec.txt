@@ -10,8 +10,10 @@ PhenotypePredictFile     , PhenoTest2.csv
 NumberOfGenomePartitions , 2
 GenomePartitionFile      , GenomePartition1.txt
 GenomePartitionFile      , GenomePartition2.txt
-EstimationMethod         , RidgeSample
-EstimateVariances        , Yes
 NumberOfIterations       , 1000
 NumberOfBurninIterations ,  100
+
 Stop
+
+EstimationMethod         , RidgeSample
+EstimateVariances        , No
