@@ -2,20 +2,12 @@ GenotypeTrainFile        , GenoTrain.csv
 PhenotypeTrainFile       , PhenoTrain.csv
 NumberOfMarkers          , 2920
 NumberOfTrainIndividuals , 215
+NumberOfPredictionSets   , 2
+GenotypePredictFile      , GenoTest1.csv
+PhenotypePredictFile     , PhenoTest1.csv
+GenotypePredictFile      , GenoTest2.csv
+PhenotypePredictFile     , PhenoTest2.csv
+NumberOfGenomePartitions , 2
+GenomePartitionFile      , GenomePartition1.txt
+GenomePartitionFile      , GenomePartition2.txt
 Stop
-
-nTestPopulations   ,2
-GenotypeTesting    ,GenoTest1.csv,GenoTest2.csv
-PhenotypeTesting   ,PhenoTest1.csv,PhenoTest2.csv
-
-nAnisTe            ,100,100
-nRound             ,1000
-nBurn              ,100
-VarA               ,0.5
-VarE               ,0.5
-NumberOfProcessors ,4
-ScalingOption      ,4
-Method             ,RidgeMCMC
-nGenomePartitions  ,2
-GenomePartition1   ,3,1,2,3
-GenomePartition2   ,2,7,8

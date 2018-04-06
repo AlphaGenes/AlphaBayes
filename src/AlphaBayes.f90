@@ -71,7 +71,7 @@ module AlphaBayesModule
   integer(int32) :: nSnp,nAnisTr,nIter,nBurn,nProcessor,GenoScaleMethod,nGenoPart,nTePop
   integer(int32),allocatable :: nAnisTe(:),nSnpPerGenoPart(:),SnpPerGenoPart(:,:)
 
-  real(real64) :: MeanY,VarY,SdY,VarG,VarE,Mu,nSnpR,nAnisTrR,ExpVarX,SumExpVarX,ObsVarX,SumObsVarX
+  real(real64) :: MeanY,VarY,SdY,VarG,VarE,Mu,nSnpR,nAnisTrR,ExpVarX,SumExpVarX,ObsVarX,SumObsVarX,EpsTolerance
   real(real64),allocatable :: AlleleFreq(:),ScaleCoef(:),PhenoTr(:),G(:),GenosTr(:,:),E(:),XpX(:)
 
   character(len=FILELENGTH) :: GenoTrFile,PhenoTrFile,EstimationMethod
@@ -125,7 +125,7 @@ module AlphaBayesModule
     subroutine ReadParam
       implicit none
 
-      integer(int32) :: i, SpecUnit, Stat, GTePop, PTePop, nAnisTeI, GenoPart
+      integer(int32) :: SpecUnit, Stat, GTePop, PTePop, nAnisTeI, GenoPart
       logical :: LogStdoutInternal
       character(len=:), allocatable :: DumString
       character(len=SPECOPTIONLENGTH) :: Line
@@ -136,6 +136,8 @@ module AlphaBayesModule
 
       ! Defaults
       LogStdoutInternal = .true.
+      GenoTrFile = ""
+      PhenoTrFile = ""
       nTePop = 0
       GTePop = 0
       PTePop = 0
@@ -147,9 +149,10 @@ module AlphaBayesModule
       VarE = 0.5
       nProcessor = 1
       GenoScaleMethod = 4
-      EstimationMethod = "Ridge"
+      EstimationMethod = "RidgeSolve"
       nGenoPart = 0
       GenoPart = 0
+      EpsTolerance=1.0E-8
 
       ! Process spec file
       Stat = 0
@@ -213,6 +216,11 @@ module AlphaBayesModule
             case ("genotypepredictfile")
               if (allocated(Second)) then
                 GTePop = GTePop + 1
+                if (GTePop .gt. nTePop) then
+                  write(STDERR, "(a)") " ERROR: Too many GenotypePredictFile specifications vs. NumberOfPredictionSets"
+                  write(STDERR, "(a)") " "
+                  stop 1
+                end if
                 write(GenoTeFile(GTePop), *) trim(adjustl(Second(1)))
                 GenoTeFile(GTePop) = adjustl(GenoTeFile(GTePop))
                 if (LogStdoutInternal) then
@@ -227,6 +235,11 @@ module AlphaBayesModule
             case ("phenotypepredictfile")
               if (allocated(Second)) then
                 PTePop = PTePop + 1
+                if (PTePop .gt. nTePop) then
+                  write(STDERR, "(a)") " ERROR: Too many PhenotypePredictFile specifications vs. NumberOfPredictionSets"
+                  write(STDERR, "(a)") " "
+                  stop 1
+                end if
                 write(PhenoTeFile(PTePop), *) trim(adjustl(Second(1)))
                 PhenoTeFile(PTePop) = adjustl(PhenoTeFile(PTePop))
                 if (LogStdoutInternal) then
@@ -251,28 +264,33 @@ module AlphaBayesModule
                 stop 1
               end if
 
-            case ("numberoftrainindividuals")
+            case ("numberoftrainrecords")
               if (allocated(Second)) then
                 nAnisTr = Char2Int(trim(adjustl(Second(1))))
                 nAnisTrR = dble(nAnisTr)
                 if (LogStdoutInternal) then
-                  write(STDOUT, "(a)") " Number of train individuals: "//trim(Int2Char(nAnisTr))
+                  write(STDOUT, "(a)") " Number of train records: "//trim(Int2Char(nAnisTr))
                 end if
               else
-                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfTrainIndividuals, i.e., NumberOfTrainIndividuals, 100"
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfTrainRecords, i.e., NumberOfTrainRecords, 100"
                 write(STDERR, "(a)") " "
                 stop 1
               end if
 
-            case ("numberofpredictionindividuals")
+            case ("numberofpredictionrecords")
               if (allocated(Second)) then
                 nAnisTeI = nAnisTeI + 1
+                if (nAnisTeI .gt. nTePop) then
+                  write(STDERR, "(a)") " ERROR: Too many NumberOfPredictionRecords specifications vs. NumberOfPredictionSets"
+                  write(STDERR, "(a)") " "
+                  stop 1
+                end if
                 nAnisTe(nAnisTeI) = Char2Int(trim(adjustl(Second(1))))
                 if (LogStdoutInternal) then
-                  write(STDOUT, "(a)") " Number of prediction individuals: "//trim(Int2Char(nAnisTe(nAnisTeI)))
+                  write(STDOUT, "(a)") " Number of prediction records: "//trim(Int2Char(nAnisTe(nAnisTeI)))
                 end if
               else
-                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfPredictionIndividuals, i.e., NumberOfPredictionIndividuals, 100"
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfPredictionRecords, i.e., NumberOfPredictionRecords, 100"
                 write(STDERR, "(a)") " "
                 stop 1
               end if
@@ -358,8 +376,8 @@ module AlphaBayesModule
               if (allocated(Second)) then
                 write(EstimationMethod, *) trim(adjustl(Second(1)))
                 EstimationMethod = adjustl(EstimationMethod)
-                if (trim(EstimationMethod) .eq. "Ridge" .or. trim(EstimationMethod) .eq. "RidgeMCMC") then
-                  write(STDERR,"(a)") " ERROR: EstimationMethod must be either Ridge or RidgeMCMC"
+                if (trim(EstimationMethod) .ne. "RidgeSolve" .or. trim(EstimationMethod) .ne. "RidgeSample") then
+                  write(STDERR,"(a)") " ERROR: EstimationMethod must be either RidgeSolve or RidgeSample"
                   write(STDERR,"(a)") " "
                   stop 1
                 endif
@@ -367,7 +385,19 @@ module AlphaBayesModule
                   write(STDOUT, "(a)") " Estimation method: "//trim(EstimationMethod)
                 end if
               else
-                write(STDERR, "(a)") " ERROR: Must specify a string for EstimationMethod, i.e., EstimationMethod, Ridge"
+                write(STDERR, "(a)") " ERROR: Must specify a string for EstimationMethod, i.e., EstimationMethod, RidgeSolve"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("convergencetolerance")
+              if (allocated(Second)) then
+                EpsTolerance = Char2Double(trim(adjustl(Second(1))))
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Convergence tolerance: "//trim(Real2Char(EpsTolerance))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a value for ConvergenceTolerance, i.e., ConvergenceTolerance, 1.0E-8"
                 write(STDERR, "(a)") " "
                 stop 1
               end if
@@ -388,6 +418,11 @@ module AlphaBayesModule
             case ("genomepartitionfile")
               if (allocated(Second)) then
                 GenoPart = GenoPart + 1
+                if (GenoPart .gt. nGenoPart) then
+                  write(STDERR, "(a)") " ERROR: Too many GenomePartitionFile specifications vs. NumberOfGenomePartitions"
+                  write(STDERR, "(a)") " "
+                  stop 1
+                end if
                 write(GenoPartFile(GenoPart), *) trim(adjustl(Second(1)))
                 GenoPartFile(GenoPart) = adjustl(GenoPartFile(GenoPart))
                 if (LogStdoutInternal) then
@@ -414,6 +449,25 @@ module AlphaBayesModule
         end if
       end do ReadSpec
       close(SpecUnit)
+
+      if (trim(GenoTrFile) .eq. "") then
+        write(STDERR, "(a)") " ERROR: Must specify a genotype train file, i.e., GenotypeTrainFile, GenotypesTrain.txt"
+        write(STDERR, "(a)") " "
+        stop 1
+      end if
+
+      if (trim(PhenoTrFile) .eq. "") then
+        write(STDERR, "(a)") " ERROR: Must specify a phenotype train file, i.e., PhenotypeTrainFile, PhenotypesTrain.txt"
+        write(STDERR, "(a)") " "
+        stop 1
+      end if
+
+      if (nSnp .eq. 0) then
+        write(STDERR, "(a)") " ERROR: Must specify the number of markers, i.e., NumberOfMarkers, 1000"
+        write(STDERR, "(a)") " "
+        stop 1
+      end if
+
       call OMP_SET_NUM_THREADS(nProcessor)
     end subroutine
 
@@ -422,11 +476,16 @@ module AlphaBayesModule
     subroutine ReadData
       implicit none
 
-      integer(int32) :: i,j,nNotMissing,GenoTrUnit,PhenoTrUnit!,AlleleFreqUnit
+      integer(int32) :: i,j,nNotMissing,GenoTrUnit,PhenoTrUnit,Unit!,AlleleFreqUnit
 
       character(len=100) :: DumC
 
       real(real64) :: TmpStat
+
+      if (nAnisTr.eq.0) then
+        nAnisTr = CountLines(PhenoTrFile)
+        nAnisTrR = dble(nAnisTr)
+      end if
 
       open(newunit=GenoTrUnit,file=trim(GenoTrFile),status="old")
       open(newunit=PhenoTrUnit,file=trim(PhenoTrFile),status="old")
@@ -444,10 +503,10 @@ module AlphaBayesModule
         read(GenoTrUnit,*) DumC,GenosTr(i,:)
         read(PhenoTrUnit,*) IdTr(i),PhenoTr(i)
         if (trim(DumC).ne.trim(IdTr(i))) then
-          write(STDERR,"(a)") "ERROR: Individual identifications in the genotype and phenotype files do not match in the training set"
-          write(STDERR,"(a,i)") "ERROR: Line: ",i
-          write(STDERR,"(a,a)") "ERROR: Genotype file identification: ",trim(DumC)
-          write(STDERR,"(a,a)") "ERROR: Phenotype file identification: ",trim(IdTr(i))
+          write(STDERR,"(a)") " ERROR: Individual identifications in the genotype and phenotype files do not match in the training set"
+          write(STDERR,"(a,i)") " ERROR: Line: ",i
+          write(STDERR,"(a,a)") " ERROR: Genotype file identification: ",trim(DumC)
+          write(STDERR,"(a,a)") " ERROR: Phenotype file identification: ",trim(IdTr(i))
           write(STDERR,"(a)") " "
           stop 1
         end if
@@ -556,25 +615,24 @@ module AlphaBayesModule
       ! flush(PhenoTrUnit)
       ! close(PhenoTrUnit)
 
-! TODO
-! if (nGenoPart.gt.0) then
-!   allocate(nSnpPerGenoPart(nGenoPart))
-!   do i=1,nGenoPart
-!     read(SpecUnit,*) DumC,nSnpPerGenoPart(i)
-!     ! write(STDOUT,*) i,nSnpPerGenoPart(i)
-!   end do
-!   allocate(SnpPerGenoPart(maxval(nSnpPerGenoPart),nGenoPart))
-!   do i=1,nGenoPart
-!     backspace(SpecUnit)
-!   end do
-!   do i=1,nGenoPart
-!     read(SpecUnit,*) DumC,DumC,SnpPerGenoPart(1:nSnpPerGenoPart(i),i)
-!     ! write(STDOUT,*) i,nSnpPerGenoPart(i),SnpPerGenoPart(1:nSnpPerGenoPart(i),i)
-!   end do
-! end if
+      if (nGenoPart.gt.0) then
+        allocate(nSnpPerGenoPart(nGenoPart))
+        do i=1,nGenoPart
+          nSnpPerGenoPart(i)=CountLines(GenoPartFile(i))
+          ! write(STDOUT,*) i,nSnpPerGenoPart(i)
+        end do
+        allocate(SnpPerGenoPart(maxval(nSnpPerGenoPart),nGenoPart))
+        do i=1,nGenoPart
+          open(newunit=Unit,file=trim(GenoPartFile(i)),status="unknown")
+          do j=1,nSnpPerGenoPart(i)
+            read(Unit,*) SnpPerGenoPart(j,i)
+          end do
+          close(Unit)
+          ! write(STDOUT,*) i,nSnpPerGenoPart(i),SnpPerGenoPart(1:nSnpPerGenoPart(i),i)
+        end do
+      end if
 
-
-      ! Here as both RidgeRegression and RidgeRegressionMCMC use them
+      ! Here as both RidgeRegressionSolve and RidgeRegressionSample use them
       allocate(E(nAnisTr))
       allocate(XpX(nSnp))
 
@@ -588,24 +646,24 @@ module AlphaBayesModule
 
     subroutine Analysis
       implicit none
-      if (trim(EstimationMethod).eq."Ridge") then
+      if (trim(EstimationMethod).eq."RidgeSolve") then
         write(STDOUT, "(a)") ""
         write(STDOUT, "(a)") " Running estimation of marker effects with provided variance components"
         write(STDOUT, "(a)") ""
-        call RidgeRegression
+        call RidgeRegressionSolve
       end if
-      if (trim(EstimationMethod).eq."RidgeMCMC") then
+      if (trim(EstimationMethod).eq."RidgeSample") then
         write(STDOUT, "(a)") ""
         write(STDOUT, "(a)") " Running estimation of marker effects and variance components with MCMC"
         write(STDOUT, "(a)") ""
-        call RidgeRegression
-        call RidgeRegressionMCMC
+        call RidgeRegressionSolve
+        call RidgeRegressionSample
       end if
     end subroutine
 
     !###########################################################################
 
-    subroutine RidgeRegression
+    subroutine RidgeRegressionSolve
       implicit none
 
       integer(int32) :: Iter,i,j,Snp,RandomOrdering(nSnp),Unit
@@ -662,7 +720,7 @@ module AlphaBayesModule
         end if
 
         ! Stopping criteria
-        if (eps.lt.1.0E-8) then
+        if (Eps.lt.EpsTolerance) then
           exit
         end if
       end do
@@ -680,7 +738,7 @@ module AlphaBayesModule
       close(Unit)
 
       ! Recalculate Ebv and residuals for later use
-      if (nGenoPart.gt.0.or.EstimationMethod.eq."RidgeMCMC") then
+      if (nGenoPart.gt.0.or.EstimationMethod.eq."RidgeSample") then
         call gemv(A=GenosTr,x=G/ScaleCoef*SdY,y=Ebv)
         E=PhenoTr-Mu-Ebv
       end if
@@ -719,7 +777,7 @@ module AlphaBayesModule
 
     !###########################################################################
 
-    subroutine RidgeRegressionMCMC
+    subroutine RidgeRegressionSample
       implicit none
 
       integer(int32) :: Iter,i,j,Snp,RandomOrdering(nSnp),Unit,GUnit,VarGUnit,VarEUnit !,MuUnit
@@ -989,6 +1047,12 @@ module AlphaBayesModule
 
       G(:)=G(:)/ScaleCoef(:)*SdY
 
+      do Pop=1,nTePop
+        if (nAnisTe(Pop).eq.0) then
+          nAnisTe(Pop) = CountLines(PhenoTeFile(Pop))
+        end if
+      end do
+
       i=maxval(nAnisTe(:))
       allocate(IdTe(i))
       allocate(GenosTe(i,nSnp))
@@ -1004,10 +1068,10 @@ module AlphaBayesModule
           read(GenoTeUnit,*) IdTe(i),GenosTe(i,:)
           read(PhenoTeUnit,*) DumC,PhenoTe(i)
           if (trim(DumC).ne.trim(IdTe(i))) then
-            write(STDERR,"(a,i)") "ERROR: Individual identifications in the genotype and phenotype files do not match in prediction set ",Pop
-            write(STDERR,"(a,i)") "ERROR: Line: ",i
-            write(STDERR,"(a,a)") "ERROR: Genotype file identification: ",trim(DumC)
-            write(STDERR,"(a,a)") "ERROR: Phenotype file identification: ",trim(IdTr(i))
+            write(STDERR,"(a,i)") " ERROR: Individual identifications in the genotype and phenotype files do not match in prediction set ",Pop
+            write(STDERR,"(a,i)") " ERROR: Line: ",i
+            write(STDERR,"(a,a)") " ERROR: Genotype file identification: ",trim(DumC)
+            write(STDERR,"(a,a)") " ERROR: Phenotype file identification: ",trim(IdTr(i))
             write(STDERR,"(a)") " "
             stop 1
           end if

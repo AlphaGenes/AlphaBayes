@@ -1,0 +1,11 @@
+*.tex
+*.html
+*.aux
+*.ilg
+*.ind
+*.log
+*.toc
+*.maf
+*.mtc*
+*.stc*
+*.pdf
