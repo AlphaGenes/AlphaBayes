@@ -1,25 +1,10 @@
 #!/bin/sh
 
-rm -f \
-AlphaBayes.aux \
-AlphaBayes.ilg \
-AlphaBayes.ind \
-AlphaBayes.log \
-AlphaBayes.maf \
-AlphaBayes.mtc \
-AlphaBayes.mtc0 \
-AlphaBayes.pdf \
-AlphaBayes.stc1 \
-AlphaBayes.stc2 \
-AlphaBayes.stc3 \
-AlphaBayes.stc4 \
-AlphaBayes.stc5 \
-AlphaBayes.stc6 \
-AlphaBayes.stc7 \
-AlphaBayes.stc8 \
-AlphaBayes.stc9 \
-AlphaBayes.tex \
-AlphaBayes.toc
+TMPS="aux ilg ind log maf mtc* stc* tex toc"
+
+for TMP in $TMPS; do
+  rm -f AlphaBayes.${TMP}
+done
 
 rst2latex.py --stylesheet preamble.sty AlphaBayes.txt AlphaBayes.tex
 
@@ -28,5 +13,9 @@ bibtex AlphaBayes.tex
 makeindex AlphaBayes.tex
 pdflatex AlphaBayes.tex
 pdflatex AlphaBayes.tex
+
+for TMP in $TMPS; do
+  rm -f AlphaBayes.${TMP}
+done
 
 open AlphaBayes.pdf
