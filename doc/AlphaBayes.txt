@@ -265,9 +265,19 @@ EstimationMethod
 EstimationMethod specifies which method is used to estimate marker effects and perform phenotype fitting and prediction. |AB| at the moment provides:
 
   * RidgeSolve estimates marker effects with provided variance components; `GeneticVariance_` (*VarG*) is used to provide variance of allele substitution effects (*VarS*) computed as *VarS=VarG/nS*, where *nS* is `NumberOfMarkers_`.
-  * RidgeSample estimates marker effects and variance components using MCMC algorithm.
+  * RidgeSample estimates marker effects and variance components (see `EstimateVariances_`) using MCMC algorithm.
 
 Default is RidgeSolve.
+
+EstimateVariances
+-----------------
+
+::
+
+  EstimateVariances , [Yes/No]
+  EstimateVariances , No
+
+EstimateVariances specifies wether variances are to be estimated when running MCMC algorithm. Default is No.
 
 ConvergenceTolerance
 --------------------
