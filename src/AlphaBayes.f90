@@ -376,7 +376,7 @@ module AlphaBayesModule
               if (allocated(Second)) then
                 write(EstimationMethod, *) trim(adjustl(Second(1)))
                 EstimationMethod = adjustl(EstimationMethod)
-                if (trim(EstimationMethod) .ne. "RidgeSolve" .or. trim(EstimationMethod) .ne. "RidgeSample") then
+                if (.not.(trim(EstimationMethod) .eq. "RidgeSolve" .or. trim(EstimationMethod) .eq. "RidgeSample")) then
                   write(STDERR,"(a)") " ERROR: EstimationMethod must be either RidgeSolve or RidgeSample"
                   write(STDERR,"(a)") " "
                   stop 1
