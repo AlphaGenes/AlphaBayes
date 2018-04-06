@@ -77,23 +77,6 @@ An example:
   NumberOfMarkers    , 1000
   Stop
 
-GenotypeTrainFile
------------------
-
-::
-
-  GenotypeTrainFile , [String]
-  GenotypeTrainFile , GenotypeTrain.txt
-
-GenotypeTrainFile specifies a file that contains marker genotypes used in training. The file should have *1 + nM* columns, where the first column are individual identifications and *nM* is number of markers and *nR* rows, where *nR* is number of records. See `NumberOfMarkers_` and `NumberOfTrainRecords_` to specify these dimensions. Columns can be separated by space, tab, or comma. Valid genotype values (genotype dosages) are between 0 and 2 (usually 0, 1, or 2, but values in between are valid too). Any value outside this range is assumed as a missing genotype and is replaced by an average genotype (marker specific). An example for four individuals genotyped at 3 markers is:
-
-::
-
-  id1 2 1 0
-  id2 0 1 9
-  id3 2 2 2
-  id4 0 1 1
-
 PhenotypeTrainFile
 ------------------
 
@@ -102,7 +85,7 @@ PhenotypeTrainFile
   PhenotypeTrainFile , [String]
   PhenotypeTrainFile , PhenotypeTrain.txt
 
-PhenotypeTrainFile specifies a file that contains phenotypes used in training. The file should have *1 + 1* columns, where the first column are individual identifications and the second column are phenotype values, and *nR* rows, where *nR* is number of records. See `NumberOfTrainRecords_` to specify number of records. Columns can be separated by space, tab, or comma. Phenotype values should be numeric and not control is given about it! An example for four individuals phenotyped is:
+PhenotypeTrainFile specifies a file that contains phenotypes used in training. The file should have *1 + 1* columns, where the first column are individual identifications and the second column are phenotype values, and *nR* rows, where *nR* is number of records. See `NumberOfTrainRecords`_ to specify number of records. Columns can be separated by space, tab, or comma. Phenotype values should be numeric and no checking is done about them! An example for four individuals phenotyped is:
 
 ::
 
@@ -110,6 +93,70 @@ PhenotypeTrainFile specifies a file that contains phenotypes used in training. T
   id2 122.9
   id3  95.7
   id4  77.8
+
+NumberOfTrainRecords
+--------------------
+
+::
+
+  NumberOfTrainRecords , [Value]
+  NumberOfTrainRecords , 100
+
+NumberOfTrainRecords specifies the number of training records used in training files. When this specification is not given all training records are used.
+
+CovariateTrainFile
+------------------
+
+::
+
+  CovariateTrainFile , [String]
+  CovariateTrainFile , CovariateTrain.txt
+
+CovariateTrainFile specifies a file that contains covariates used in training. The file should have *1 + nC* columns, where the first column are individual identifications and *nC* is the number of covariate columns, and *nR* rows, where *nR* is number of records. See `NumberOfCovariates`_ `NumberOfTrainRecords`_ to specify these dimensions. Columns can be separated by space, tab, or comma. Covariates values should be numeric and no checking is done about them! An example for four individuals with two covariates is:
+
+::
+
+  id1 1 -0.5
+  id2 2  1.5
+  id3 1  2.2
+  id4 0 -0.1
+
+NumberOfCovariates
+------------------
+
+::
+
+  NumberOfCovariates , [Value]
+  NumberOfCovariates , 2
+
+NumberOfCovariates specifies the number of covariates in `CovariateTrainFile`_ and `PhenotypePredictFile`_. This specification must be given if `CovariateTrainFile`_ is specified!
+
+GenotypeTrainFile
+-----------------
+
+::
+
+  GenotypeTrainFile , [String]
+  GenotypeTrainFile , GenotypeTrain.txt
+
+GenotypeTrainFile specifies a file that contains marker genotypes used in training. The file should have *1 + nM* columns, where the first column are individual identifications and *nM* is number of marker genotype columns and *nR* rows, where *nR* is number of records. See `NumberOfMarkers`_ and `NumberOfTrainRecords`_ to specify these dimensions. Columns can be separated by space, tab, or comma. Valid genotype values (genotype dosages) are between 0 and 2 (usually 0, 1, or 2, but values in between are valid too). Any value outside this range is assumed as a missing genotype and is replaced by an average genotype (marker specific). An example for four individuals genotyped at 3 markers is:
+
+::
+
+  id1 2 1 0
+  id2 0 1 9
+  id3 2 2 2
+  id4 0 1 1
+
+NumberOfMarkers
+---------------
+
+::
+
+  NumberOfMarkers , [Value]
+  NumberOfMarkers , 1000
+
+NumberOfMarkers specifies the number of marker genotypes in genotype files; `GenotypeTrainFile`_ and `GenotypePredictFile`_. This specification must be given if `GenotypeTrainFile`_ is specified!
 
 NumberOfPredictSets
 -------------------
@@ -129,7 +176,7 @@ GenotypePredictFile
   GenotypePredictFile , [String]
   GenotypePredictFile , GenotypePredict.txt
 
-GenotypePredictFile specifies a file that contains marker genotypes used in prediction. See `GenotypeTrainFile`_ for file format details. See `NumberOfpredictRecords_` to specify number of records. In case there are several prediction sets set `NumberOfPredictSets_` and use several GenotypePredictFile specifications, e.g., for two prediction sets use:
+GenotypePredictFile specifies a file that contains marker genotypes used in prediction. See `GenotypeTrainFile`_ for file format details. See `NumberOfpredictRecords`_ to specify number of records. In case there are several prediction sets set `NumberOfPredictSets`_ and use several GenotypePredictFile specifications, e.g., for two prediction sets use:
 
 ::
 
@@ -144,32 +191,12 @@ PhenotypePredictFile
   PhenotypePredictFile , [String]
   PhenotypePredictFile , PhenotypePredict.txt
 
-PhenotypePredictFile specifies a file that contains phenotypes used in prediction. See `PhenotypeTrainFile`_ for file format details. See `NumberOfpredictRecords_` to specify number of records. In case there are several prediction sets use several PhenotypePredictFile specifications, e.g., for two prediction sets use:
+PhenotypePredictFile specifies a file that contains phenotypes used in prediction. See `PhenotypeTrainFile`_ for file format details. See `NumberOfpredictRecords`_ to specify number of records. In case there are several prediction sets use several PhenotypePredictFile specifications, e.g., for two prediction sets use:
 
 ::
 
   PhenotypePredictFile , PhenotypePredict1.txt
   PhenotypePredictFile , PhenotypePredict2.txt
-
-NumberOfMarkers
----------------
-
-::
-
-  NumberOfMarkers , [Value]
-  NumberOfMarkers , 1000
-
-NumberOfMarkers specifies the number of markers used. This specification must be given!
-
-NumberOfTrainRecords
---------------------
-
-::
-
-  NumberOfTrainRecords , [Value]
-  NumberOfTrainRecords , 100
-
-NumberOfTrainRecords specifies the number of training records used in `GenotypeTrainFile_` and `PhenotypeTrainFile_`. When this specification is not given all records in training files are used.
 
 NumberOfPredictRecords
 ----------------------
@@ -179,7 +206,7 @@ NumberOfPredictRecords
   NumberOfPredictRecords , [Value]
   NumberOfPredictRecords , 100
 
-NumberOfPredictRecords specifies the number of prediction records used in `GenotypePredictFile_` and `PhenotypePredictFile_`. When this specification is not given all records in prediction files are used. In case there are several prediction sets use several NumberOfPredictRecords specifications, e.g., for two prediction sets use:
+NumberOfPredictRecords specifies the number of prediction records used in `GenotypePredictFile`_ and `PhenotypePredictFile`_. When this specification is not given all records in prediction files are used. In case there are several prediction sets use several NumberOfPredictRecords specifications, e.g., for two prediction sets use:
 
 ::
 
@@ -194,7 +221,7 @@ NumberOfIterations
   NumberOfIterations , [Value]
   NumberOfIterations , 10000
 
-NumberOfIterations specifies the number of iterations used. Iteration stops either when either this value or `ConvergenceTolerance_` is reached. Default is 10,000.
+NumberOfIterations specifies the number of iterations used. Iteration stops either when either this value or `ConvergenceTolerance`_ is reached. Default is 10,000.
 
 NumberOfBurnInIterations
 ------------------------
@@ -264,8 +291,8 @@ EstimationMethod
 
 EstimationMethod specifies which method is used to estimate marker effects and perform phenotype fitting and prediction. |AB| at the moment provides:
 
-  * RidgeSolve estimates marker effects with provided variance components; `GeneticVariance_` (*VarG*) is used to provide variance of allele substitution effects (*VarS*) computed as *VarS=VarG/nS*, where *nS* is `NumberOfMarkers_`.
-  * RidgeSample estimates marker effects and variance components (see `EstimateVariances_`) using MCMC algorithm.
+  * RidgeSolve estimates marker effects with provided variance components; `GeneticVariance`_ (*VarG*) is used to provide variance of allele substitution effects (*VarS*) computed as *VarS=VarG/nS*, where *nS* is `NumberOfMarkers`_.
+  * RidgeSample estimates marker effects and variance components (see `EstimateVariances`_) using MCMC algorithm.
 
 Default is RidgeSolve.
 
@@ -287,7 +314,7 @@ ConvergenceTolerance
   ConvergenceTolerance , [String]
   ConvergenceTolerance , RidgeSolve
 
-ConvergenceTolerance specifies convergence tolerance (sum of squared differences between the previous and current solutions) for the RidgeSolve `EstimationMethod_`. Iteration stops either when either this value or `NumberOfIterations_` is reached. Default is 1.0E-8.
+ConvergenceTolerance specifies convergence tolerance (sum of squared differences between the previous and current solutions) for the RidgeSolve `EstimationMethod`_. Iteration stops either when either this value or `NumberOfIterations`_ is reached. Default is 1.0E-8.
 
 NumberOfGenomePartitions
 ------------------------
@@ -307,7 +334,7 @@ GenomePartitionFile
   GenomePartitionFile , [String]
   GenomePartitionFile , GenomePartition.txt
 
-GenomePartitionFile specifies a file that contains markers used for genome partitions. The file should simply contain a list of marker numbers with one marker number per line. The marker number refers to a column in genotype files, i.e., `GenotypeTrainFile_`. For example, marker number 2 refers to the scond marker genotype, which is the third column in a genotype file. In case there are several genome partitions use several GenomePartitionFile specifications, e.g., for two genome partitions use specification shown below. Note that markers should not be repeated in different partitions - |AB| does not check for this!
+GenomePartitionFile specifies a file that contains markers used for genome partitions. The file should simply contain a list of marker numbers with one marker number per line. The marker number refers to a column in genotype files, i.e., `GenotypeTrainFile`_. For example, marker number 2 refers to the scond marker genotype, which is the third column in a genotype file. In case there are several genome partitions use several GenomePartitionFile specifications, e.g., for two genome partitions use specification shown below. Note that markers should not be repeated in different partitions - |AB| does not check for this!
 
 ::
 

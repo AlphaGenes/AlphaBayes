@@ -1,7 +1,9 @@
-GenotypeTrainFile        , GenoTrain.csv
 PhenotypeTrainFile       , PhenoTrain.csv
-NumberOfMarkers          , 2920
 NumberOfTrainRecords     , 215
+CovariateTrainFile       , CovariatesTrain.csv
+NumberOfCovariates       , 1
+GenotypeTrainFile        , GenoTrain.csv
+NumberOfMarkers          , 2920
 NumberOfPredictSets      , 2
 GenotypePredictFile      , GenoTest1.csv
 PhenotypePredictFile     , PhenoTest1.csv

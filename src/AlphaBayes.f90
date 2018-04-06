@@ -68,14 +68,22 @@ module AlphaBayesModule
   public :: AlphaBayesTitle,ReadParam,ReadData,Analysis,Prediction
 
   ! Module global variables :(((
-  integer(int32) :: nMar,nAnisTr,nIter,nBurn,nProcessor,GenoScaleMethod,nGenoPart,nTePop
-  integer(int32),allocatable :: nAnisTe(:),nMarPerGenoPart(:),MarPerGenoPart(:,:)
+  integer(int32) :: nRecTr,nMar,nCovar,nFixed,nRandom,nEffMax
+  integer(int32) :: nIter,nBurn,nProcessor,GenoScaleMethod,nGenoPart,nTePop
+  integer(int32),allocatable :: nRecTe(:),nMarPerGenoPart(:)
+  integer(int32),allocatable :: MarPerGenoPart(:,:)
 
-  real(real64) :: MeanY,VarY,SdY,VarBv,VarMar,VarErr,MuEst,nMarR,nAnisTrR,ExpVarX,SumExpVarX,ObsVarX,SumObsVarX,EpsTolerance
-  real(real64),allocatable :: AlleleFreq(:),ScaleCoef(:),PhenoTr(:),MarEst(:),GenosTr(:,:),Err(:),XpX(:)
+  real(real64) :: PhenMean,PhenVar,PhenSd,VarBv,VarRandom,VarMar,VarErr,MuEst,nMarR,nRecTrR
+  real(real64) :: ExpVarX,SumExpVarX,ObsVarX,SumObsVarX,EpsTolerance
+  real(real64),allocatable :: AlleleFreq(:),MarSd(:),PhenoTr(:),Err(:)
+  real(real64),allocatable :: CovarEst(:),FixedEst(:),RandomEst(:),MarEst(:),BvEst(:)
+  real(real64),allocatable :: CovarMean(:),CovarVar(:),CovarSd(:)
+  real(real64),allocatable :: XpXCovar(:),XpXFixed(:),XpXRandom(:),XpXMar(:)
+  real(real64),allocatable :: FixedTr(:),RandomTr(:)
+  real(real64),allocatable :: CovarTr(:,:),GenosTr(:,:)
 
-  character(len=FILELENGTH) :: GenoTrFile,PhenoTrFile,EstimationMethod
-  character(len=FILELENGTH),allocatable :: GenoTeFile(:),PhenoTeFile(:),GenoPartFile(:)
+  character(len=FILELENGTH) :: GenoTrFile,PhenoTrFile,CovarTrFile,FixedTrFile,EstimationMethod
+  character(len=FILELENGTH),allocatable :: GenoTeFile(:),PhenoTeFile(:),GenoPartFile(:),RandomTrFile(:)
   character(len=IDLENGTH),allocatable :: IdTr(:)
 
   logical :: EstimateVariances
@@ -87,6 +95,9 @@ module AlphaBayesModule
 
   CHARACTER(LEN=100),PARAMETER :: INTERCEPTESTIMATEFILE="InterceptEstimate.txt"
   CHARACTER(LEN=100),PARAMETER :: INTERCEPTSAMPLESFILE="InterceptSamples.txt"
+
+  CHARACTER(LEN=100),PARAMETER :: COVARIATEESTIMATEFILE="CovariateEstimate.txt"
+  CHARACTER(LEN=100),PARAMETER :: COVARIATESAMPLESFILE="CovariateSamples.txt"
 
   CHARACTER(LEN=100),PARAMETER :: MARKERESTIMATEFILE="MarkerEstimate.txt"
   CHARACTER(LEN=100),PARAMETER :: MARKERSAMPLESFILE="MarkerSamples.txt"
@@ -127,8 +138,11 @@ module AlphaBayesModule
     subroutine ReadParam
       implicit none
 
-      integer(int32) :: SpecUnit, Stat, GTePop, PTePop, nAnisTeI, GenoPart
-      logical :: LogStdoutInternal
+      integer(int32) :: SpecUnit, Stat, GTePop, PTePop, nRecTeI, GenoPart
+
+      logical :: LogStdoutInternal, PhenoTrFileGiven, CovarTrFileGiven, FixedTrFileGiven
+      logical :: RandomTrFileGiven, GenoTrFileGiven
+
       character(len=:), allocatable :: DumString
       character(len=SPECOPTIONLENGTH) :: Line
       character(len=SPECOPTIONLENGTH) :: First
@@ -138,13 +152,28 @@ module AlphaBayesModule
 
       ! Defaults
       LogStdoutInternal = .true.
-      GenoTrFile = ""
       PhenoTrFile = ""
+      nRecTr = 0
+      PhenoTrFileGiven = .false.
+      CovarTrFile = ""
+      nCovar = 0
+      CovarTrFileGiven = .false.
+      FixedTrFile = ""
+      nFixed = 0
+      FixedTrFileGiven = .false.
+      ! RandomTrFile allocatable
+      nRandom = 0
+      RandomTrFileGiven = .false.
+      GenoTrFile = ""
+      nMar = 0
+      GenoTrFileGiven = .false.
+      ! nRecTe allocatable
       nTePop = 0
+      ! PhenoTeFile allocatable
+      ! GenoTeFile allocatable
       GTePop = 0
       PTePop = 0
-      nAnisTr = 0
-      nAnisTeI = 0
+      nRecTeI = 0
       nIter = 10000
       nBurn = 1000
       VarBv = 0.5
@@ -172,21 +201,9 @@ module AlphaBayesModule
         else
           select case (ToLower(trim(DumString)))
             ! Inputs
-            case ("genotypetrainfile")
-              if (allocated(Second)) then
-                write(GenoTrFile, *) trim(adjustl(Second(1)))
-                GenoTrFile = adjustl(GenoTrFile)
-                if (LogStdoutInternal) then
-                  write(STDOUT, "(a)") " Genotype train file: "//trim(GenoTrFile)
-                end if
-              else
-                write(STDERR, "(a)") " ERROR: Must specify a file for GenotypeTrainFile, i.e., GenotypeTrainFile, GenotypesTrain.txt"
-                write(STDERR, "(a)") " "
-                stop 1
-              end if
-
             case ("phenotypetrainfile")
               if (allocated(Second)) then
+                PhenoTrFileGiven = .true.
                 write(PhenoTrFile, *) trim(adjustl(Second(1)))
                 PhenoTrFile = adjustl(PhenoTrFile)
                 if (LogStdoutInternal) then
@@ -198,39 +215,88 @@ module AlphaBayesModule
                 stop 1
               end if
 
+            case ("numberoftrainrecords")
+              if (allocated(Second)) then
+                nRecTr = Char2Int(trim(adjustl(Second(1))))
+                nRecTrR = dble(nRecTr)
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Number of train records: "//trim(Int2Char(nRecTr))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfTrainRecords, i.e., NumberOfTrainRecords, 100"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("covariatetrainfile")
+              if (allocated(Second)) then
+                CovarTrFileGiven = .true.
+                write(CovarTrFile, *) trim(adjustl(Second(1)))
+                CovarTrFile = adjustl(CovarTrFile)
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Covariate train file: "//trim(CovarTrFile)
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a file for CovariateTrainFile, i.e., CovariateTrainFile, CovariatesTrain.txt"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("numberofcovariates")
+              if (allocated(Second)) then
+                if (ToLower(trim(adjustl(Second(1)))) .ne. "0") then
+                  nCovar = Char2Int(trim(adjustl(Second(1))))
+                  if (LogStdoutInternal) then
+                    write(STDOUT, "(a)") " Number of covariates: "//trim(Int2Char(nTePop))
+                  end if
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfCovariates, i.e., NumberOfCovariates, 2"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("genotypetrainfile")
+              if (allocated(Second)) then
+                GenoTrFileGiven = .true.
+                write(GenoTrFile, *) trim(adjustl(Second(1)))
+                GenoTrFile = adjustl(GenoTrFile)
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Genotype train file: "//trim(GenoTrFile)
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a file for GenotypeTrainFile, i.e., GenotypeTrainFile, GenotypesTrain.txt"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("numberofmarkers")
+              if (allocated(Second)) then
+                nMar = Char2Int(trim(adjustl(Second(1))))
+                nMarR = dble(nMar)
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Number of markers: "//trim(Int2Char(nMar))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfMarkers, i.e., NumberOfMarkers, 100"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
             case ("numberofpredictsets")
               if (allocated(Second)) then
                 if (ToLower(trim(adjustl(Second(1)))) .ne. "0") then
                   nTePop = Char2Int(trim(adjustl(Second(1))))
                   allocate(PhenoTeFile(nTePop))
                   allocate(GenoTeFile(nTePop))
-                  allocate(nAnisTe(nTePop))
-                  nAnisTe = 0
+                  allocate(nRecTe(nTePop))
+                  nRecTe = 0
                   if (LogStdoutInternal) then
                     write(STDOUT, "(a)") " Number of prediction sets: "//trim(Int2Char(nTePop))
                   end if
                 end if
               else
                 write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfPredictSets, i.e., NumberOfPredictSets, 2"
-                write(STDERR, "(a)") " "
-                stop 1
-              end if
-
-            case ("genotypepredictfile")
-              if (allocated(Second)) then
-                GTePop = GTePop + 1
-                if (GTePop .gt. nTePop) then
-                  write(STDERR, "(a)") " ERROR: Too many GenotypePredictFile specifications vs. NumberOfPredictSets"
-                  write(STDERR, "(a)") " "
-                  stop 1
-                end if
-                write(GenoTeFile(GTePop), *) trim(adjustl(Second(1)))
-                GenoTeFile(GTePop) = adjustl(GenoTeFile(GTePop))
-                if (LogStdoutInternal) then
-                  write(STDOUT, "(a)") " Genotype predict file: "//trim(GenoTeFile(GTePop))
-                end if
-              else
-                write(STDERR, "(a)") " ERROR: Must specify a file for GenotypePredictFile, i.e., GenotypePredictFile, GenotypesPredict.txt"
                 write(STDERR, "(a)") " "
                 stop 1
               end if
@@ -254,46 +320,39 @@ module AlphaBayesModule
                 stop 1
               end if
 
-            case ("numberofmarkers")
-              if (allocated(Second)) then
-                nMar = Char2Int(trim(adjustl(Second(1))))
-                nMarR = dble(nMar)
-                if (LogStdoutInternal) then
-                  write(STDOUT, "(a)") " Number of markers: "//trim(Int2Char(nMar))
-                end if
-              else
-                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfMarkers, i.e., NumberOfMarkers, 100"
-                write(STDERR, "(a)") " "
-                stop 1
-              end if
-
-            case ("numberoftrainrecords")
-              if (allocated(Second)) then
-                nAnisTr = Char2Int(trim(adjustl(Second(1))))
-                nAnisTrR = dble(nAnisTr)
-                if (LogStdoutInternal) then
-                  write(STDOUT, "(a)") " Number of train records: "//trim(Int2Char(nAnisTr))
-                end if
-              else
-                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfTrainRecords, i.e., NumberOfTrainRecords, 100"
-                write(STDERR, "(a)") " "
-                stop 1
-              end if
-
             case ("numberofpredictrecords")
               if (allocated(Second)) then
-                nAnisTeI = nAnisTeI + 1
-                if (nAnisTeI .gt. nTePop) then
+                nRecTeI = nRecTeI + 1
+                if (nRecTeI .gt. nTePop) then
                   write(STDERR, "(a)") " ERROR: Too many NumberOfPredictRecords specifications vs. NumberOfPredictSets"
                   write(STDERR, "(a)") " "
                   stop 1
                 end if
-                nAnisTe(nAnisTeI) = Char2Int(trim(adjustl(Second(1))))
+                nRecTe(nRecTeI) = Char2Int(trim(adjustl(Second(1))))
                 if (LogStdoutInternal) then
-                  write(STDOUT, "(a)") " Number of prediction records: "//trim(Int2Char(nAnisTe(nAnisTeI)))
+                  write(STDOUT, "(a)") " Number of prediction records: "//trim(Int2Char(nRecTe(nRecTeI)))
                 end if
               else
                 write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfPredictRecords, i.e., NumberOfPredictRecords, 100"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("genotypepredictfile")
+              if (allocated(Second)) then
+                GTePop = GTePop + 1
+                if (GTePop .gt. nTePop) then
+                  write(STDERR, "(a)") " ERROR: Too many GenotypePredictFile specifications vs. NumberOfPredictSets"
+                  write(STDERR, "(a)") " "
+                  stop 1
+                end if
+                write(GenoTeFile(GTePop), *) trim(adjustl(Second(1)))
+                GenoTeFile(GTePop) = adjustl(GenoTeFile(GTePop))
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Genotype predict file: "//trim(GenoTeFile(GTePop))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a file for GenotypePredictFile, i.e., GenotypePredictFile, GenotypesPredict.txt"
                 write(STDERR, "(a)") " "
                 stop 1
               end if
@@ -467,24 +526,25 @@ module AlphaBayesModule
       end do ReadSpec
       close(SpecUnit)
 
-      if (trim(GenoTrFile) .eq. "") then
-        write(STDERR, "(a)") " ERROR: Must specify a genotype train file, i.e., GenotypeTrainFile, GenotypesTrain.txt"
-        write(STDERR, "(a)") " "
-        stop 1
-      end if
-
-      if (trim(PhenoTrFile) .eq. "") then
+      if (.not. PhenoTrFileGiven) then
         write(STDERR, "(a)") " ERROR: Must specify a phenotype train file, i.e., PhenotypeTrainFile, PhenotypesTrain.txt"
         write(STDERR, "(a)") " "
         stop 1
       end if
 
-      if (nMar .eq. 0) then
-        write(STDERR, "(a)") " ERROR: Must specify the number of markers, i.e., NumberOfMarkers, 1000"
+      if (CovarTrFileGiven .and. nCovar .eq. 0) then
+        write(STDERR, "(a)") " ERROR: Must specify number of covariates in the covariate file, i.e., NumberOfCovariates, 2"
         write(STDERR, "(a)") " "
         stop 1
       end if
 
+      if (GenoTrFileGiven .and. nMar .eq. 0) then
+        write(STDERR, "(a)") " ERROR: Must specify number of markers in the genotype file, i.e., NumberOfMarkers, 100"
+        write(STDERR, "(a)") " "
+        stop 1
+      end if
+
+      nEffMax = maxval([nCovar,nFixed,nRandom,nMar])
       call OMP_SET_NUM_THREADS(nProcessor)
     end subroutine
 
@@ -493,115 +553,157 @@ module AlphaBayesModule
     subroutine ReadData
       implicit none
 
-      integer(int32) :: i,j,nNotMissing,GenoTrUnit,PhenoTrUnit,Unit!,AlleleFreqUnit
+      integer(int32) :: i,j,nNotMissing,PhenoTrUnit,CovarTrUnit,GenoTrUnit,Unit!,AlleleFreqUnit
 
       character(len=100) :: DumC
 
       real(real64) :: TmpStat
 
-      if (nAnisTr.eq.0) then
-        nAnisTr = CountLines(PhenoTrFile)
-        nAnisTrR = dble(nAnisTr)
+      if (nRecTr.eq.0) then
+        nRecTr = CountLines(PhenoTrFile)
+        nRecTrR = dble(nRecTr)
       end if
 
-      open(newunit=GenoTrUnit,file=trim(GenoTrFile),status="old")
       open(newunit=PhenoTrUnit,file=trim(PhenoTrFile),status="old")
-      !open(newunit=AlleleFreqUnit,file="AlleleFreq.txt",status="unknown")
-      !write(AlleleFreqUnit,"(a11,1x,a11)") "Mar","AlleleFreq"
 
-      allocate(GenosTr(nAnisTr,nMar))
-      allocate(PhenoTr(nAnisTr))
-      allocate(MarEst(nMar))
-      allocate(AlleleFreq(nMar))
-      allocate(ScaleCoef(nMar))
-      allocate(IdTr(nAnisTr))
-
-      do i=1,nAnisTr
-        read(GenoTrUnit,*) DumC,GenosTr(i,:)
-        read(PhenoTrUnit,*) IdTr(i),PhenoTr(i)
-        if (trim(DumC).ne.trim(IdTr(i))) then
-          write(STDERR,"(a)") " ERROR: Individual identifications in the genotype and phenotype files do not match in the training set"
-          write(STDERR,"(a,i)") " ERROR: Line: ",i
-          write(STDERR,"(a,a)") " ERROR: Genotype file identification: ",trim(DumC)
-          write(STDERR,"(a,a)") " ERROR: Phenotype file identification: ",trim(IdTr(i))
-          write(STDERR,"(a)") " "
-          stop 1
-        end if
-      end do
-
-      MeanY=Mean(PhenoTr)
-      VarY=Var(PhenoTr,MeanY)
-      SdY=sqrt(VarY)
-      PhenoTr=(PhenoTr-MeanY)/SdY
-
-      SumExpVarX=0.0d0
-      SumObsVarX=0.0d0
-      do j=1,nMar
-
-        ! Compute allele freqs
-        AlleleFreq(j)=0.0d0
-        nNotMissing=0
-        do i=1,nAnisTr
-          if ((GenosTr(i,j).ge.0.0).and.(GenosTr(i,j).le.2.0)) then
-            AlleleFreq(j)=AlleleFreq(j)+GenosTr(i,j)
-            nNotMissing=nNotMissing+1
-          end if
-        end do
-        if (nNotMissing.ne.0) then
-          AlleleFreq(j)=AlleleFreq(j)/dble(2*nNotMissing)
-        else
-          AlleleFreq(j)=0.0d0
-        end if
-        !write(AlleleFreqUnit,"(i11,1x,f11.8)") j,AlleleFreq(j)
-
-        ! Fix any odd data
-        do i=1,nAnisTr
-          if ((GenosTr(i,j).lt.0.0).or.(GenosTr(i,j).gt.2.0)) then
-            GenosTr(i,j)=2.0d0*AlleleFreq(j)
-          end if
-        end do
-
-        ! Standardize
-        TmpStat=Var(GenosTr(:,j))
-        ExpVarX=2.0d0*(1.0d0-AlleleFreq(j))*AlleleFreq(j)+0.00001d0 ! if p=0.00001, then 2*p*q=0.00001
-        SumExpVarX=SumExpVarX+ExpVarX
-        ObsVarX=TmpStat+0.00001d0
-        SumObsVarX=SumObsVarX+ObsVarX
-
-        ! ... center
-        GenosTr(:,j)=GenosTr(:,j)-(2.0d0*AlleleFreq(j))
-
-        ! ... scale
-        ScaleCoef(j)=1.0d0
-
-        if (GenoScaleMethod.eq.2) then
-          ! Scale by marker specific variance - expected
-          ExpVarX=sqrt(ExpVarX)
-          ScaleCoef(j)=ExpVarX
-          GenosTr(:,j)=GenosTr(:,j)/ScaleCoef(j)
-        end if
-
-        if (GenoScaleMethod.eq.3) then
-          ! Scale by marker specific variance - observed
-          ObsVarX=sqrt(ObsVarX)
-          ScaleCoef(j)=ObsVarX
-          GenosTr(:,j)=GenosTr(:,j)/ScaleCoef(j)
-        end if
-
-      end do
-
-      if (GenoScaleMethod.eq.4) then
-        ! Scale by average marker variance - expected
-        ExpVarX=sqrt(SumExpVarX/nMarR)
-        ScaleCoef(:)=ExpVarX
-        GenosTr(:,:)=GenosTr(:,:)/ScaleCoef(1)
+      allocate(PhenoTr(nRecTr))
+      allocate(IdTr(nRecTr))
+      if (nCovar.gt.0) then
+        allocate(CovarTr(nRecTr,nCovar))
+        allocate(CovarEst(nCovar))
+        allocate(CovarMean(nCovar))
+        allocate(CovarVar(nCovar))
+        allocate(CovarSd(nCovar))
+        open(newunit=CovarTrUnit,file=trim(CovarTrFile),status="old")
+      end if
+      if (nMar.gt.0) then
+        allocate(GenosTr(nRecTr,nMar))
+        allocate(MarEst(nMar))
+        allocate(AlleleFreq(nMar))
+        allocate(MarSd(nMar))
+        open(newunit=GenoTrUnit,file=trim(GenoTrFile),status="old")
+        !open(newunit=AlleleFreqUnit,file="AlleleFreq.txt",status="unknown")
+        !write(AlleleFreqUnit,"(a11,1x,a11)") "Mar","AlleleFreq"
       end if
 
-      if (GenoScaleMethod.eq.5) then
-        ! Scale by average marker variance - observed
-        ObsVarX=sqrt(SumObsVarX/nMarR)
-        ScaleCoef(:)=ObsVarX
-        GenosTr(:,:)=GenosTr(:,:)/ScaleCoef(1)
+      do i=1,nRecTr
+        read(PhenoTrUnit,*) IdTr(i),PhenoTr(i)
+        if (nCovar.gt.0) then
+          read(CovarTrUnit,*) DumC,CovarTr(i,:)
+          if (trim(IdTr(i)).ne.trim(DumC)) then
+            write(STDERR,"(a)") " ERROR: Individual identifications in the phenotype and covariate files do not match"
+            write(STDERR,"(a,i)") " ERROR: Line: ",i
+            write(STDERR,"(a,a)") " ERROR: Phenotype file identification: ",trim(IdTr(i))
+            write(STDERR,"(a,a)") " ERROR: Covariate file identification: ",trim(DumC)
+            write(STDERR,"(a)") " "
+            stop 1
+          end if
+        end if
+        if (nMar.gt.0) then
+          read(GenoTrUnit,*) DumC,GenosTr(i,:)
+          if (trim(IdTr(i)).ne.trim(DumC)) then
+            write(STDERR,"(a)") " ERROR: Individual identifications in the phenotype and genotype files do not match in the training set"
+            write(STDERR,"(a,i)") " ERROR: Line: ",i
+            write(STDERR,"(a,a)") " ERROR: Phenotype file identification: ",trim(IdTr(i))
+            write(STDERR,"(a,a)") " ERROR: Genotype file identification: ",trim(DumC)
+            write(STDERR,"(a)") " "
+            stop 1
+          end if
+        end if
+      end do
+      close(GenoTrUnit)
+      if (nCovar.gt.0) then
+        close(CovarTrUnit)
+      end if
+      if (nMar.gt.0) then
+        close(PhenoTrUnit)
+        ! flush(AlleleFreqUnit)
+        ! close(AlleleFreqUnit)
+      end if
+
+      PhenMean=Mean(PhenoTr)
+      PhenVar=Var(PhenoTr,PhenMean)
+      PhenSd=sqrt(PhenVar)
+      PhenoTr=(PhenoTr-PhenMean)/PhenSd
+      if (nCovar.gt.0) then
+        do i=1,nCovar
+          CovarMean(i)=Mean(CovarTr(:,i))
+          CovarVar(i)=Var(CovarTr(:,i),CovarMean(i))
+          CovarSd(i)=sqrt(CovarVar(i))
+          CovarTr(:,i)=(CovarTr(:,i)-CovarMean(i))/CovarSd(i)
+        end do
+      end if
+
+      if (nMar.gt.0) then
+        SumExpVarX=0.0d0
+        SumObsVarX=0.0d0
+        do j=1,nMar
+
+          ! Compute allele freqs
+          AlleleFreq(j)=0.0d0
+          nNotMissing=0
+          do i=1,nRecTr
+            if ((GenosTr(i,j).ge.0.0).and.(GenosTr(i,j).le.2.0)) then
+              AlleleFreq(j)=AlleleFreq(j)+GenosTr(i,j)
+              nNotMissing=nNotMissing+1
+            end if
+          end do
+          if (nNotMissing.ne.0) then
+            AlleleFreq(j)=AlleleFreq(j)/dble(2*nNotMissing)
+          else
+            AlleleFreq(j)=0.0d0
+          end if
+          !write(AlleleFreqUnit,"(i11,1x,f11.8)") j,AlleleFreq(j)
+
+          ! Fix any odd data
+          do i=1,nRecTr
+            if ((GenosTr(i,j).lt.0.0).or.(GenosTr(i,j).gt.2.0)) then
+              GenosTr(i,j)=2.0d0*AlleleFreq(j)
+            end if
+          end do
+
+          ! Standardize
+          TmpStat=Var(GenosTr(:,j))
+          ExpVarX=2.0d0*(1.0d0-AlleleFreq(j))*AlleleFreq(j)+0.00001d0 ! if p=0.00001, then 2*p*q=0.00001
+          SumExpVarX=SumExpVarX+ExpVarX
+          ObsVarX=TmpStat+0.00001d0
+          SumObsVarX=SumObsVarX+ObsVarX
+
+          ! ... center
+          GenosTr(:,j)=GenosTr(:,j)-(2.0d0*AlleleFreq(j))
+
+          ! ... scale
+          MarSd(j)=1.0d0
+
+          if (GenoScaleMethod.eq.2) then
+            ! Scale by marker specific variance - expected
+            ExpVarX=sqrt(ExpVarX)
+            MarSd(j)=ExpVarX
+            GenosTr(:,j)=GenosTr(:,j)/MarSd(j)
+          end if
+
+          if (GenoScaleMethod.eq.3) then
+            ! Scale by marker specific variance - observed
+            ObsVarX=sqrt(ObsVarX)
+            MarSd(j)=ObsVarX
+            GenosTr(:,j)=GenosTr(:,j)/MarSd(j)
+          end if
+
+        end do
+
+        if (GenoScaleMethod.eq.4) then
+          ! Scale by average marker variance - expected
+          ExpVarX=sqrt(SumExpVarX/nMarR)
+          MarSd=ExpVarX
+          GenosTr=GenosTr/MarSd(1)
+        end if
+
+        if (GenoScaleMethod.eq.5) then
+          ! Scale by average marker variance - observed
+          ObsVarX=sqrt(SumObsVarX/nMarR)
+          MarSd=ObsVarX
+          GenosTr=GenosTr/MarSd(1)
+        end if
       end if
 
       ! A note about scaling and its influence on marker estimates - if we
@@ -616,14 +718,9 @@ module AlphaBayesModule
       ! b*x/SDX=b'*x/SDX*SDY
       ! b=b'/SDX*SDY
 
-      close(GenoTrUnit)
-      close(PhenoTrUnit)
-      ! flush(AlleleFreqUnit)
-      !close(AlleleFreqUnit)
-
       ! open(newunit=GenoTrUnit,file="GenoTrainProcessed.txt",status="unknown")
       ! open(newunit=PhenoTrUnit,file="PhenoTrainProcessed.txt",status="unknown")
-      ! do i=1,nAnisTr
+      ! do i=1,nRecTr
       !   write(GenoTrUnit,"("//Int2Char(nMar)//"(1x,f20.16))") GenosTr(i,:)
       !   write(PhenoTrUnit,*) PhenoTr(i)
       ! end do
@@ -632,7 +729,7 @@ module AlphaBayesModule
       ! flush(PhenoTrUnit)
       ! close(PhenoTrUnit)
 
-      if (nGenoPart.gt.0) then
+      if (nMar.gt.0.and.nGenoPart.gt.0) then
         allocate(nMarPerGenoPart(nGenoPart))
         do i=1,nGenoPart
           nMarPerGenoPart(i)=CountLines(GenoPartFile(i))
@@ -650,13 +747,19 @@ module AlphaBayesModule
       end if
 
       ! Here as both RidgeRegressionSolve and RidgeRegressionSample use them
-      allocate(Err(nAnisTr))
-      allocate(XpX(nMar))
-
-      ! Construct XpX
-      do j=1,nMar
-        XpX(j)=dot(x=GenosTr(:,j),y=GenosTr(:,j)) + tiny(GenosTr(1,1))
-      end do
+      allocate(Err(nRecTr))
+      if (nCovar.gt.0) then
+        allocate(XpXCovar(nCovar))
+        do j=1,nCovar
+          XpXCovar(j)=dot(x=CovarTr(:,j),y=CovarTr(:,j)) + tiny(CovarTr(1,1))
+        end do
+      end if
+      if (nMar.gt.0) then
+        allocate(XpXMar(nMar))
+        do j=1,nMar
+          XpXMar(j)=dot(x=GenosTr(:,j),y=GenosTr(:,j)) + tiny(GenosTr(1,1))
+        end do
+      end if
     end subroutine
 
     !###########################################################################
@@ -683,58 +786,88 @@ module AlphaBayesModule
     subroutine RidgeRegressionSolve
       implicit none
 
-      integer(int32) :: Iter,i,j,Mar,RandomOrdering(nMar),Unit
+      integer(int32) :: Iter,i,j,k,RandomOrdering(nEffMax),Unit
 
       real(real64) :: PreMar,Rhs,Lhs,Sol,Diff,Eps
-      real(real64),allocatable :: BvEst(:),BvEstGenoPart(:)
+      real(real64),allocatable :: BvEstGenoPart(:)
 
-      allocate(BvEst(nAnisTr))
+      allocate(BvEst(nRecTr))
       if (nGenoPart.gt.0) then
-        allocate(BvEstGenoPart(nAnisTr))
+        allocate(BvEstGenoPart(nRecTr))
       end if
 
-      ! Working phenotypes
+      ! Working phenotypes (centered) --> residuals
       Err=PhenoTr
 
       ! Initialise
       MuEst=0.0d0
-      MarEst=0.0d0
 
-      ! Construct XpXTauE
-      XpX=XpX/VarErr ! can do it only once for all rounds!!!
-      VarMar=VarBv/nMarR ! approximate variance of allele substitution effects
-      PreMar=1.0d0/VarMar
+      ! Initialise and construct XpXTauE
+      if (nCovar.gt.0) then
+        CovarEst=0.0d0
+        XpXCovar=XpXCovar/VarErr ! can do it only once for all rounds!!!
+      end if
+      if (nMar.gt.0) then
+        MarEst=0.0d0
+        XpXMar=XpXMar/VarErr ! can do it only once for all rounds!!!
+        VarMar=VarBv/nMarR ! approximate variance of allele substitution effects
+        PreMar=1.0d0/VarMar
+      end if
 
       ! Iterate
       do Iter=1,nIter
         Eps=0.0d0
 
         ! Intercept
-        Lhs=nAnisTrR/VarErr
-        Rhs=sum(Err)/VarErr + nAnisTrR*MuEst/VarErr
+        Lhs=nRecTrR/VarErr
+        Rhs=sum(Err)/VarErr + nRecTrR*MuEst/VarErr
         Sol=Rhs/Lhs
         Diff=Sol-MuEst
         Err=Err-Diff
         MuEst=Sol
         Eps=Eps+Diff*Diff
 
-        ! Marker effects
-        RandomOrdering=RandomOrder(nMar)
-        do j=1,nMar
-          Mar=RandomOrdering(j)
-          Lhs=XpX(Mar) + PreMar
-          Rhs=dot(x=GenosTr(:,Mar),y=Err)/VarErr + XpX(Mar)*MarEst(Mar)
-          Sol=Rhs/Lhs
-          Diff=Sol-MarEst(Mar)
-          Err=Err-GenosTr(:,Mar)*Diff
-          MarEst(Mar)=Sol
-          Eps=Eps+Diff*Diff
-        end do
+        ! Covariates
+        if (nCovar.gt.0) then
+          RandomOrdering(1:nCovar)=RandomOrder(nCovar)
+          do j=1,nCovar
+            k=RandomOrdering(j)
+            Lhs=XpXCovar(k)
+            Rhs=dot(x=CovarTr(:,k),y=Err)/VarErr + XpXCovar(k)*CovarEst(k)
+            Sol=Rhs/Lhs
+            Diff=Sol-CovarEst(k)
+            Err=Err-CovarTr(:,k)*Diff
+            CovarEst(k)=Sol
+            Eps=Eps+Diff*Diff
+          end do
+        end if
+
+        ! Markers
+        if (nMar.gt.0) then
+          RandomOrdering(1:nMar)=RandomOrder(nMar)
+          do j=1,nMar
+            k=RandomOrdering(j)
+            Lhs=XpXMar(k) + PreMar
+            Rhs=dot(x=GenosTr(:,k),y=Err)/VarErr + XpXMar(k)*MarEst(k)
+            Sol=Rhs/Lhs
+            Diff=Sol-MarEst(k)
+            Err=Err-GenosTr(:,k)*Diff
+            MarEst(k)=Sol
+            Eps=Eps+Diff*Diff
+          end do
+        end if
 
         ! Recompute working residuals to avoid rounding errors
         if (mod(Iter,100).eq.0) then
-          call gemv(A=GenosTr,x=MarEst,y=BvEst)
-          Err=PhenoTr-MuEst-BvEst
+          Err=PhenoTr-MuEst
+          if (nCovar.gt.0) then
+            call gemv(A=CovarTr,x=CovarEst,y=BvEst)
+            Err=Err-BvEst
+          end if
+          if (nMar.gt.0) then
+            call gemv(A=GenosTr,x=MarEst,y=BvEst)
+            Err=Err-BvEst
+          end if
         end if
 
         ! Stopping criteria
@@ -744,52 +877,61 @@ module AlphaBayesModule
       end do
 
       open(newunit=Unit,file=INTERCEPTESTIMATEFILE,status="unknown")
-      write(Unit,*) MuEst*SdY + MeanY
+      write(Unit,*) MuEst*PhenSd + PhenMean
       flush(Unit)
       close(Unit)
 
-      open(newunit=Unit,file=MARKERESTIMATEFILE,status="unknown")
-      do i=1,nMar
-        write(Unit,*) MarEst(i)/ScaleCoef(i)*SdY
-      end do
-      flush(Unit)
-      close(Unit)
-
-      ! Recalculate breeding values and working residuals for later use
-      if (nGenoPart.gt.0.or.EstimationMethod.eq."RidgeSample") then
-        call gemv(A=GenosTr,x=MarEst/ScaleCoef*SdY,y=BvEst)
-        Err=PhenoTr-MuEst-BvEst
-      end if
-
-      if (nGenoPart.gt.0) then
-        do i=1,nGenoPart
-          BvEstGenoPart=0.0d0
-          ! Might have used gemv here, but for MCMC this would mean calling gemv nIter*nGenoPart times!!!
-          do j=1,nMarPerGenoPart(i)
-            Mar=MarPerGenoPart(j,i)
-            BvEstGenoPart=BvEstGenoPart+(GenosTr(:,Mar)*MarEst(Mar)/ScaleCoef(Mar)*SdY)
-          end do
-          BvEst=BvEst-BvEstGenoPart
-          open(newunit=Unit,file=trim(GENOPARTFILESTART)//trim(Int2Char(i))//trim(GENOPARTESTIMATEFILEEND),status="unknown")
-          do j=1,nAnisTr
-            write(Unit,*) BvEstGenoPart(j)
-          end do
-          flush(Unit)
-          close(Unit)
-        end do
-        open(newunit=Unit,file=trim(GENOPARTFILESTART)//trim("Remainder")//trim(GENOPARTESTIMATEFILEEND),status="unknown")
-        do j=1,nAnisTr
-          write(Unit,*) BvEst(j)
+      if (nCovar.gt.0) then
+        open(newunit=Unit,file=COVARIATEESTIMATEFILE,status="unknown")
+        do i=1,nCovar
+          write(Unit,*) CovarEst(i)/CovarSd(i)*PhenSd
         end do
         flush(Unit)
         close(Unit)
       end if
 
-      ! Convert XpXTauE=XpX/VarErr back to XpX
-      XpX=XpX*VarErr
-      deallocate(BvEst)
-      if (nGenoPart.gt.0) then
-        deallocate(BvEstGenoPart)
+      if (nMar.gt.0) then
+        open(newunit=Unit,file=MARKERESTIMATEFILE,status="unknown")
+        do i=1,nMar
+          write(Unit,*) MarEst(i)/MarSd(i)*PhenSd
+        end do
+        flush(Unit)
+        close(Unit)
+
+        if (nGenoPart.gt.0) then
+          call gemv(A=GenosTr,x=MarEst/MarSd*PhenSd,y=BvEst)
+          do i=1,nGenoPart
+            BvEstGenoPart=0.0d0
+            ! Might have used gemv here, but for MCMC this would mean calling gemv nIter*nGenoPart times!!!
+            do j=1,nMarPerGenoPart(i)
+              k=MarPerGenoPart(j,i)
+              BvEstGenoPart=BvEstGenoPart+(GenosTr(:,k)*MarEst(k)/MarSd(k)*PhenSd)
+            end do
+            BvEst=BvEst-BvEstGenoPart
+            open(newunit=Unit,file=trim(GENOPARTFILESTART)//trim(Int2Char(i))//trim(GENOPARTESTIMATEFILEEND),status="unknown")
+            do j=1,nRecTr
+              write(Unit,*) BvEstGenoPart(j)
+            end do
+            flush(Unit)
+            close(Unit)
+          end do
+          open(newunit=Unit,file=trim(GENOPARTFILESTART)//trim("Remainder")//trim(GENOPARTESTIMATEFILEEND),status="unknown")
+          do j=1,nRecTr
+            write(Unit,*) BvEst(j)
+          end do
+          flush(Unit)
+          close(Unit)
+        end if
+        ! Convert XpXTauE=XpX/VarErr back to XpX
+        if (nCovar.gt.0) then
+          XpXCovar=XpXCovar*VarErr
+        end if
+        if (nMar.gt.0) then
+          XpXMar=XpXMar*VarErr
+        end if
+        if (nGenoPart.gt.0) then
+          deallocate(BvEstGenoPart)
+        end if
       end if
     end subroutine
 
@@ -798,42 +940,62 @@ module AlphaBayesModule
     subroutine RidgeRegressionSample
       implicit none
 
-      integer(int32) :: Iter,i,j,Mar,RandomOrdering(nMar),Unit,MuUnit,MarUnit,VarMarUnit,VarErrUnit
+      integer(int32) :: Iter,i,j,k,RandomOrdering(nEffMax)
+      integer(int32) :: Unit,MuUnit,CovarUnit,FixedUnit,RandomUnit,MarUnit,VarMarUnit,VarErrUnit
       integer(int32),allocatable :: GenoPartUnit(:)
 
       real(real64) :: TmpR,Rhs,Lhs,Sol,Diff,nSampR
       real(real64) :: MuSamp,VarErrSamp,VarMarSamp,VarErrEst,VarMarEst
       real(real64) :: R2,ErrDF0,ErrDF,MarDF0,MarDF,ErrS0,MarS0,MSX
-      real(real64),allocatable :: MarSamp(:)
+      real(real64),allocatable :: CovarSamp(:),FixedSamp(:),RandomSamp(:),MarSamp(:)
       real(real64),allocatable :: SX2(:),MX2(:),BvSamp(:),BvSampGenoPart(:)
-      real(real64),allocatable :: GaussDevMu(:),GaussDevMar(:),GammaDevErr(:),GammaDevMar(:)
+      real(real64),allocatable :: GaussDevMu(:),GaussDevCovar(:),GaussDevFixed(:)
+      real(real64),allocatable :: GaussDevRandom(:),GaussDevMar(:)
+      real(real64),allocatable :: GammaDevRandom(:),GammaDevMar(:),GammaDevErr(:)
 
-      character(len=100) :: MarSampFmt, BvSampFmt
+      character(len=100) :: CovarSampFmt,MarSampFmt,BvSampFmt
 
-      MarSampFmt="("//trim(Int2Char(nMar))//trim("f)")
-      BvSampFmt="("//trim(Int2Char(nAnisTr))//trim("f)")
-
-      allocate(BvSamp(nAnisTr))
-      allocate(MarSamp(nMar))
+      BvSampFmt="("//trim(Int2Char(nRecTr))//trim("f)")
+      if (nCovar.gt.0) then
+        CovarSampFmt="("//trim(Int2Char(nCovar))//trim("f)")
+      end if
+      if (nMar.gt.0) then
+        MarSampFmt="("//trim(Int2Char(nMar))//trim("f)")
+      end if
+      allocate(BvSamp(nRecTr))
       allocate(GaussDevMu(nIter))
-      allocate(GaussDevMar(nMar))
+      if (nCovar.gt.0) then
+        allocate(CovarSamp(nCovar))
+      end if
+      if (nMar.gt.0) then
+        allocate(MarSamp(nMar))
+        allocate(GaussDevMar(nMar))
+      end if
       if (EstimateVariances) then
         allocate(SX2(nMar))
         allocate(MX2(nMar))
+        if (nMar.gt.0) then
+          allocate(GammaDevMar(nIter))
+        end if
         allocate(GammaDevErr(nIter))
-        allocate(GammaDevMar(nIter))
       end if
-      if (nGenoPart.gt.0) then
+      if (nMar.gt.0.and.nGenoPart.gt.0) then
         allocate(GenoPartUnit(nGenoPart+1))
-        allocate(BvSampGenoPart(nAnisTr))
+        allocate(BvSampGenoPart(nRecTr))
       end if
 
       ! Initialise
       MuEst=0.0d0
       MuSamp=0.0d0
-      MarEst=0.0d0
-      MarSamp=0.0d0
-      VarMarEst=0.0d0
+      if (nCovar.gt.0) then
+        CovarEst=0.0d0
+        CovarSamp=0.0d0
+      end if
+      if (nMar.gt.0) then
+        MarEst=0.0d0
+        MarSamp=0.0d0
+        VarMarEst=0.0d0
+      end if
       VarErrEst=0.0d0
 
       if (EstimateVariances) then
@@ -843,41 +1005,54 @@ module AlphaBayesModule
         TmpR=1 ! =Var(Err) ! should be 1 when Phen is standardized
         VarErrSamp=TmpR*(1.0d0-R2)
         ErrDF0=5.0d0
-        ErrDF=nAnisTrR+ErrDF0
+        ErrDF=nRecTrR+ErrDF0
         ErrS0=VarErrSamp*(ErrDF0+2.0d0)
 
-        MarDF0=5.0d0
-        MarDF=nMarR+MarDF0
-        SX2(:)=0.0d0
-        MX2(:)=0.0d0
-        do j=1,nMar
-          SX2(j)=sum(GenosTr(:,j)*GenosTr(:,j))
-          MX2(j)=Mean(GenosTr(:,j))
-          MX2(j)=MX2(j)*MX2(j)
-        end do
-        MSX=sum(SX2)/nAnisTrR-sum(MX2)
-        VarMarSamp=TmpR*R2/MSX
-        MarS0=VarMarSamp*(MarDF0+2.0d0)
+        if (nMar.gt.0) then
+          MarDF0=5.0d0
+          MarDF=nMarR+MarDF0
+          SX2=0.0d0
+          MX2=0.0d0
+          do j=1,nMar
+            SX2(j)=sum(GenosTr(:,j)*GenosTr(:,j))
+            MX2(j)=Mean(GenosTr(:,j))
+            MX2(j)=MX2(j)*MX2(j)
+          end do
+          MSX=sum(SX2)/nRecTrR-sum(MX2)
+          VarMarSamp=TmpR*R2/MSX
+          MarS0=VarMarSamp*(MarDF0+2.0d0)
+        end if
       else
-        VarMarSamp=(VarBv/nMarR)/VarY
-        VarErrSamp=VarErr/VarY
+        if (nMar.gt.0) then
+          VarMarSamp=(VarBv/nMarR)/PhenVar
+        end if
+        VarErrSamp=VarErr/PhenVar
       end if
 
       ! Gauss and Gamma deviates
-      GaussDevMu(:)=SampleIntelGaussD(n=nIter)
+      GaussDevMu=SampleIntelGaussD(n=nIter)
       if (EstimateVariances) then
-        GammaDevErr(:)=SampleIntelGammaD(n=nIter,shape=ErrDF/2.0d0,scale=2.0d0)
-        GammaDevMar(:)=SampleIntelGammaD(n=nIter,shape=MarDF/2.0d0,scale=2.0d0)
+        GammaDevErr=SampleIntelGammaD(n=nIter,shape=ErrDF/2.0d0,scale=2.0d0)
+        if (nMar.gt.0) then
+          GammaDevMar=SampleIntelGammaD(n=nIter,shape=MarDF/2.0d0,scale=2.0d0)
+        end if
       end if
 
       ! Samples files
       open(newunit=MuUnit,file=INTERCEPTSAMPLESFILE,status="unknown")
-      open(newunit=MarUnit,file=MARKERSAMPLESFILE,status="unknown")
+      if (nCovar.gt.0) then
+        open(newunit=CovarUnit,file=COVARIATESAMPLESFILE,status="unknown")
+      end if
+      if (nMar.gt.0) then
+        open(newunit=MarUnit,file=MARKERSAMPLESFILE,status="unknown")
+      end if
       if (EstimateVariances) then
         open(newunit=VarErrUnit,file=RESIDUALVARIANCESAMPLESFILE,status="unknown")
-        open(newunit=VarMarUnit,file=MARKERVARIANCESAMPLESFILE,status="unknown")
+        if (nMar.gt.0) then
+          open(newunit=VarMarUnit,file=MARKERVARIANCESAMPLESFILE,status="unknown")
+        end if
       end if
-      if (nGenoPart.gt.0) then
+      if (nMar.gt.0.and.nGenoPart.gt.0) then
         do i=1,nGenoPart
           open(newunit=GenoPartUnit(i),file=trim(GENOPARTFILESTART)//trim(Int2Char(i))//trim(GENOPARTSAMPLESFILEEND),status="unknown")
         end do
@@ -888,89 +1063,120 @@ module AlphaBayesModule
       nSampR=dble(nIter-nBurn)
       do Iter=1,nIter
         ! Intercept
-        Lhs=nAnisTrR/VarErrSamp
-        Rhs=sum(Err)/VarErrSamp + nAnisTrR*MuSamp/VarErrSamp
+        Lhs=nRecTrR/VarErrSamp
+        Rhs=sum(Err)/VarErrSamp + nRecTrR*MuSamp/VarErrSamp
         Sol=Rhs/Lhs + GaussDevMu(Iter)/sqrt(Lhs)
         Diff=Sol-MuSamp
         Err=Err-Diff
         MuSamp=Sol
         if (Iter.gt.nBurn) then
-          write(MuUnit,*) MuSamp*SdY + MeanY
+          write(MuUnit,*) MuSamp*PhenSd + PhenMean
           MuEst=MuEst+MuSamp/nSampR
         end if
 
-        ! Marker effects
-        RandomOrdering=RandomOrder(nMar)
-        GaussDevMar(:)=SampleIntelGaussD(n=nMar)
-        do j=1,nMar
-          Mar=RandomOrdering(j)
-          Lhs=XpX(Mar)/VarErrSamp + 1.0d0/VarMarSamp
-          Rhs=dot(x=GenosTr(:,Mar),y=Err)/VarErrSamp + XpX(Mar)*MarSamp(Mar)/VarErrSamp
-          Sol=Rhs/Lhs + GaussDevMar(j)/sqrt(Lhs)
-          Diff=Sol-MarSamp(Mar)
-          Err=Err-GenosTr(:,Mar)*Diff
-          MarSamp(Mar)=Sol
-        end do
-        if (Iter.gt.nBurn) then
-          write(MarUnit,MarSampFmt) MarSamp/ScaleCoef*SdY
-          MarEst=MarEst+MarSamp/nSampR
+        ! Covariates
+        if (nCovar.gt.0) then
+          RandomOrdering(1:nCovar)=RandomOrder(nCovar)
+          GaussDevCovar=SampleIntelGaussD(n=nCovar)
+          do j=1,nCovar
+            k=RandomOrdering(j)
+            Lhs=XpXCovar(k)/VarErrSamp
+            Rhs=dot(x=CovarTr(:,k),y=Err)/VarErrSamp + XpXCovar(k)*CovarSamp(k)/VarErrSamp
+            Sol=Rhs/Lhs + GaussDevCovar(j)/sqrt(Lhs)
+            Diff=Sol-CovarSamp(k)
+            Err=Err-CovarTr(:,k)*Diff
+            CovarSamp(k)=Sol
+          end do
+          if (Iter.gt.nBurn) then
+            write(CovarUnit,CovarSampFmt) CovarSamp/CovarSd*PhenSd
+            CovarEst=CovarEst+CovarSamp/nSampR
+          end if
         end if
 
-        ! Marker variance
-        if (EstimateVariances) then
-          VarMarSamp=(dot(x=MarSamp,y=MarSamp)+MarS0)/GammaDevMar(Iter)
+        ! Markers
+        if (nMar.gt.0) then
+          RandomOrdering(1:nMar)=RandomOrder(nMar)
+          GaussDevMar=SampleIntelGaussD(n=nMar)
+          do j=1,nMar
+            k=RandomOrdering(j)
+            Lhs=XpXMar(k)/VarErrSamp + 1.0d0/VarMarSamp
+            Rhs=dot(x=GenosTr(:,k),y=Err)/VarErrSamp + XpXMar(k)*MarSamp(k)/VarErrSamp
+            Sol=Rhs/Lhs + GaussDevMar(j)/sqrt(Lhs)
+            Diff=Sol-MarSamp(k)
+            Err=Err-GenosTr(:,k)*Diff
+            MarSamp(k)=Sol
+          end do
           if (Iter.gt.nBurn) then
-            write(VarMarUnit,*) VarMarSamp*VarY
-            VarMarEst=VarMarEst+VarMarSamp/nSampR
+            write(MarUnit,MarSampFmt) MarSamp/MarSd*PhenSd
+            MarEst=MarEst+MarSamp/nSampR
+            ! Genome partitions
+            if (nGenoPart.gt.0) then
+              call gemv(A=GenosTr,x=MarSamp/MarSd*PhenSd,y=BvSamp)
+              do i=1,nGenoPart
+                BvSampGenoPart=0.0d0
+                ! Might have used gemv here, but for MCMC this would mean calling gemv nIter*nGenoPart times!!!
+                do j=1,nMarPerGenoPart(i)
+                  k=MarPerGenoPart(j,i)
+                  BvSampGenoPart=BvSampGenoPart+(GenosTr(:,k)*MarSamp(k)/MarSd(k)*PhenSd)
+                end do
+                BvSamp=BvSamp-BvSampGenoPart
+                write(GenoPartUnit(i),BvSampFmt) BvSampGenoPart
+              end do
+              write(GenoPartUnit(i),BvSampFmt) BvSamp
+            end if
+          end if
+
+          ! Marker variance
+          if (EstimateVariances) then
+            VarMarSamp=(dot(x=MarSamp,y=MarSamp)+MarS0)/GammaDevMar(Iter)
+            if (Iter.gt.nBurn) then
+              write(VarMarUnit,*) VarMarSamp*PhenVar
+              VarMarEst=VarMarEst+VarMarSamp/nSampR
+            end if
           end if
         end if
 
         ! Recompute working residuals to avoid rounding errors
         if (mod(Iter,100).eq.0) then
-          call gemv(A=GenosTr,x=MarSamp,y=BvSamp)
-          Err=PhenoTr-MuSamp-BvSamp
+          Err=PhenoTr-MuSamp
+          if (nCovar.gt.0) then
+            call gemv(A=CovarTr,x=CovarSamp,y=BvSamp)
+            Err=Err-BvSamp
+          end if
+          if (nMar.gt.0) then
+            call gemv(A=GenosTr,x=MarSamp,y=BvSamp)
+            Err=Err-BvSamp
+          end if
         end if
-
         ! Residual variance
         if (EstimateVariances) then
           VarErrSamp=(dot(x=Err,y=Err)+ErrS0)/GammaDevErr(Iter)
           if (Iter.gt.nBurn) then
-            write(VarErrUnit,*) VarErrSamp*VarY
+            write(VarErrUnit,*) VarErrSamp*PhenVar
             VarErrEst=VarErrEst+VarErrSamp/nSampR
           end if
         end if
-
-        ! Genome partitions
-        if (Iter.gt.nBurn) then
-          if (nGenoPart.gt.0) then
-            call gemv(A=GenosTr,x=MarSamp/ScaleCoef*SdY,y=BvSamp)
-            do i=1,nGenoPart
-              BvSampGenoPart=0.0d0
-              ! Might have used gemv here, but for MCMC this would mean calling gemv nIter*nGenoPart times!!!
-              do j=1,nMarPerGenoPart(i)
-                Mar=MarPerGenoPart(j,i)
-                BvSampGenoPart=BvSampGenoPart+(GenosTr(:,Mar)*MarSamp(Mar)/ScaleCoef(Mar)*SdY)
-              end do
-              BvSamp=BvSamp-BvSampGenoPart
-              write(GenoPartUnit(i),BvSampFmt) BvSampGenoPart
-            end do
-            write(GenoPartUnit(i),BvSampFmt) BvSamp
-          end if
-        end if
-
       end do
 
       flush(MuUnit)
       close(MuUnit)
-      flush(MarUnit)
-      close(MarUnit)
+      if (nCovar.gt.0) then
+        flush(CovarUnit)
+        close(CovarUnit)
+      end if
+      if (nMar.gt.0) then
+        flush(MarUnit)
+        close(MarUnit)
+      end if
       if (EstimateVariances) then
-        flush(VarMarUnit)
-        close(VarMarUnit)
+        if (nMar.gt.0) then
+          flush(VarMarUnit)
+          close(VarMarUnit)
+        end if
         flush(VarErrUnit)
         close(VarErrUnit)
       end if
-      if (nGenoPart.gt.0) then
+      if (nMar.gt.0.and.nGenoPart.gt.0) then
         do i=1,nGenoPart+1
           flush(GenoPartUnit(i))
           close(GenoPartUnit(i))
@@ -979,68 +1185,87 @@ module AlphaBayesModule
 
       ! Output posterior means
       open(newunit=Unit,file=INTERCEPTESTIMATEFILE,status="unknown")
-      write(Unit,*) MuEst*SdY + MeanY
+      write(Unit,*) MuEst*PhenSd + PhenMean
       flush(Unit)
       close(Unit)
 
-      open(newunit=Unit,file=MARKERESTIMATEFILE,status="unknown")
-      do i=1,nMar
-        write(Unit,*) MarEst(i)/ScaleCoef(i)*SdY
-      end do
-      flush(Unit)
-      close(Unit)
-
-      if (EstimateVariances) then
-        open(newunit=Unit,file=RESIDUALVARIANCEESTIMATEFILE,status="unknown")
-        write(Unit,*) VarErrEst*VarY
-        flush(Unit)
-        close(Unit)
-
-        open(newunit=Unit,file=MARKERVARIANCEESTIMATEFILE,status="unknown")
-        write(Unit,*) VarMarEst*VarY
+      if (nCovar.gt.0) then
+        open(newunit=Unit,file=COVARIATEESTIMATEFILE,status="unknown")
+        do i=1,nCovar
+          write(Unit,*) CovarEst(i)/CovarSd(i)*PhenSd
+        end do
         flush(Unit)
         close(Unit)
       end if
 
-      if (nGenoPart.gt.0) then
+      if (nMar.gt.0) then
+        open(newunit=Unit,file=MARKERESTIMATEFILE,status="unknown")
+        do i=1,nMar
+          write(Unit,*) MarEst(i)/MarSd(i)*PhenSd
+        end do
+        flush(Unit)
+        close(Unit)
+      end if
+
+      if (EstimateVariances) then
+        open(newunit=Unit,file=RESIDUALVARIANCEESTIMATEFILE,status="unknown")
+        write(Unit,*) VarErrEst*PhenVar
+        flush(Unit)
+        close(Unit)
+
+        if (nMar.gt.0) then
+          open(newunit=Unit,file=MARKERVARIANCEESTIMATEFILE,status="unknown")
+          write(Unit,*) VarMarEst*PhenVar
+          flush(Unit)
+          close(Unit)
+        end if
+      end if
+
+      if (nMar.gt.0.and.nGenoPart.gt.0) then
         ! These are not BvEst, not Samp, but we simply reuse the already allocated variable
-        call gemv(A=GenosTr,x=MarEst/ScaleCoef*SdY,y=BvSamp)
+        call gemv(A=GenosTr,x=MarEst/MarSd*PhenSd,y=BvSamp)
         do i=1,nGenoPart
           BvSampGenoPart=0.0d0
           ! Might have used gemv here, but for MCMC this would mean calling gemv nIter*nGenoPart times!!!
           do j=1,nMarPerGenoPart(i)
-            Mar=MarPerGenoPart(j,i)
-            BvSampGenoPart=BvSampGenoPart+(GenosTr(:,Mar)*MarEst(Mar)/ScaleCoef(Mar)*SdY)
+            k=MarPerGenoPart(j,i)
+            BvSampGenoPart=BvSampGenoPart+(GenosTr(:,k)*MarEst(k)/MarSd(k)*PhenSd)
           end do
           BvSamp=BvSamp-BvSampGenoPart
           open(newunit=Unit,file=trim(GENOPARTFILESTART)//trim(Int2Char(i))//trim(GENOPARTESTIMATEFILEEND),status="unknown")
-          do j=1,nAnisTr
+          do j=1,nRecTr
             write(Unit,*) BvSampGenoPart(j)
           end do
           flush(Unit)
           close(Unit)
         end do
         open(newunit=Unit,file=trim(GENOPARTFILESTART)//trim("Remainder")//trim(GENOPARTESTIMATEFILEEND),status="unknown")
-        do j=1,nAnisTr
+        do j=1,nRecTr
           write(Unit,*) BvSamp(j)
         end do
         flush(Unit)
         close(Unit)
       end if
 
-      deallocate(XpX)
       deallocate(BvSamp)
-      deallocate(Err)
-      deallocate(MarSamp)
       deallocate(GaussDevMu)
-      deallocate(GaussDevMar)
+      if (nCovar.gt.0) then
+        deallocate(CovarSamp)
+        deallocate(GaussDevCovar)
+      end if
+      if (nMar.gt.0) then
+        deallocate(MarSamp)
+        deallocate(GaussDevMar)
+      end if
       if (EstimateVariances) then
         deallocate(SX2)
         deallocate(MX2)
         deallocate(GammaDevErr)
-        deallocate(GammaDevMar)
+        if (nMar.gt.0) then
+          deallocate(GammaDevMar)
+        end if
       end if
-      if (nGenoPart.gt.0) then
+      if (nMar.gt.0.and.nGenoPart.gt.0) then
         deallocate(GenoPartUnit)
         deallocate(BvSampGenoPart)
       end if
@@ -1053,119 +1278,121 @@ module AlphaBayesModule
 
       integer(int32) :: i,j,Pop,Unit,SummaryUnit,GenoTeUnit,PhenoTeUnit
 
-      real(real64),allocatable :: BvEst(:),PhenoTe(:),GenosTe(:,:)
+      real(real64),allocatable :: PhenoTe(:),GenosTe(:,:)
 
       character(len=100) :: DumC,File
       character(len=20),allocatable :: IdTe(:)
 
       type(CorrelationReal64) :: Cors
 
-      open(newunit=SummaryUnit,file="PredictionsSummary.txt",status="unknown")
-      write(SummaryUnit,"(a14,3(1x,a12),3(1x,a20))") "Set","CorsObsEst","SlopeObsEst","SlopeEstObs","CovObsEst","VarObs","VarEst"
+      if (nMar.gt.0) then
 
-      allocate(BvEst(nAnisTr))
+        open(newunit=SummaryUnit,file="PredictionsSummary.txt",status="unknown")
+        write(SummaryUnit,"(a14,3(1x,a12),3(1x,a20))") "Set","CorsObsEst","SlopeObsEst","SlopeEstObs","CovObsEst","VarObs","VarEst"
 
-      open(newunit=Unit,file="PredictionsForSetTrain.txt",status="unknown")
-      call gemv(A=GenosTr,x=MarEst,y=BvEst)
-      PhenoTr=MeanY+PhenoTr*SdY
-      write(Unit,"(a20,2(1x,a20))") "Id","Observed","Estimate"
-      do i=1,nAnisTr
-        write(Unit,"(a20,2(1x,f20.10))") IdTr(i),PhenoTr(i),BvEst(i)
-      end do
-      flush(Unit)
-      close(Unit)
-
-      Cors=Cor(PhenoTr,BvEst)
-      DumC="Train"
-      write(SummaryUnit,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cors%Cor,Cors%Cov/Cors%Var2,Cors%Cov/Cors%Var1,Cors%Cov,Cors%Var1,Cors%Var2
-
-      deallocate(BvEst)
-
-      MarEst=MarEst/ScaleCoef(:)*SdY
-
-      do Pop=1,nTePop
-        if (nAnisTe(Pop).eq.0) then
-          nAnisTe(Pop) = CountLines(PhenoTeFile(Pop))
-        end if
-      end do
-
-      i=maxval(nAnisTe(:))
-      allocate(IdTe(i))
-      allocate(GenosTe(i,nMar))
-      allocate(PhenoTe(i))
-      allocate(BvEst(i))
-
-      do Pop=1,nTePop
-
-        open(newunit=GenoTeUnit,file=trim(GenoTeFile(Pop)),status="old")
-        open(newunit=PhenoTeUnit,file=trim(PhenoTeFile(Pop)),status="old")
-
-        do i=1,nAnisTe(Pop)
-          read(GenoTeUnit,*) IdTe(i),GenosTe(i,:)
-          read(PhenoTeUnit,*) DumC,PhenoTe(i)
-          if (trim(DumC).ne.trim(IdTe(i))) then
-            write(STDERR,"(a,i)") " ERROR: Individual identifications in the genotype and phenotype files do not match in prediction set ",Pop
-            write(STDERR,"(a,i)") " ERROR: Line: ",i
-            write(STDERR,"(a,a)") " ERROR: Genotype file identification: ",trim(DumC)
-            write(STDERR,"(a,a)") " ERROR: Phenotype file identification: ",trim(IdTr(i))
-            write(STDERR,"(a)") " "
-            stop 1
-          end if
-        end do
-
-        do j=1,nMar
-          ! Fix any odd data
-          do i=1,nAnisTe(Pop)
-            if ((GenosTe(i,j).lt.0.0).or.(GenosTe(i,j).gt.2.0)) then
-              GenosTe(i,j)=2.0d0*AlleleFreq(j)
-            end if
-          end do
-
-          ! Standardize
-
-          ! ... center
-          GenosTe(:,j)=GenosTe(:,j)-(2.0d0*AlleleFreq(j))
-
-          ! ... scale
-          ! no need because we scaled the marker solutions
-        end do
-
-        close(GenoTeUnit)
-        close(PhenoTeUnit)
-
-        File="PredictionsForSetPredict"//Int2Char(Pop)//".txt"
-        open(newunit=Unit,file=trim(File),status="unknown")
-        call gemv(A=GenosTe(1:nAnisTe(Pop),:),x=MarEst,y=BvEst(1:nAnisTe(Pop)))
+        open(newunit=Unit,file="PredictionsForSetTrain.txt",status="unknown")
+        call gemv(A=GenosTr,x=MarEst,y=BvEst)
+        PhenoTr=PhenMean+PhenoTr*PhenSd
         write(Unit,"(a20,2(1x,a20))") "Id","Observed","Estimate"
-        do i=1,nAnisTe(Pop)
-          write(Unit,"(a20,2(1x,f20.10))") IdTe(i),PhenoTe(i),BvEst(i)
+        do i=1,nRecTr
+          write(Unit,"(a20,2(1x,f20.10))") IdTr(i),PhenoTr(i),BvEst(i)
         end do
         flush(Unit)
         close(Unit)
 
-        Cors=cor(PhenoTe(1:nAnisTe(Pop)),BvEst(1:nAnisTe(Pop)))
-        DumC="Predict"//Int2Char(Pop)
+        Cors=Cor(PhenoTr,BvEst)
+        DumC="Train"
         write(SummaryUnit,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cors%Cor,Cors%Cov/Cors%Var2,Cors%Cov/Cors%Var1,Cors%Cov,Cors%Var1,Cors%Var2
 
-        ! open(newunit=GenoTeUnit,file="GenoTest"//Int2Char(Pop)//"Processed.txt",status="unknown")
-        ! open(newunit=PhenoTeUnit,file="PhenoTest"//Int2Char(Pop)//"Processed.txt",status="unknown")
-        ! do i=1,nAnisTe(Pop)
-        !   write(GenoTeUnit,"("//Int2Char(nMar)//"(1x,f20.16))") GenosTe(i,:)
-        !   write(PhenoTeUnit,*) PhenoTe(i)
-        ! end do
-        ! flush(GenoTeUnit)
-        ! close(GenoTeUnit)
-        ! flush(PhenoTeUnit)
-        ! close(PhenoTeUnit)
-      end do
+        deallocate(BvEst)
 
-      deallocate(IdTe)
-      deallocate(GenosTe)
-      deallocate(PhenoTe)
-      deallocate(BvEst)
+        MarEst=MarEst/MarSd*PhenSd
 
-      flush(SummaryUnit)
-      close(SummaryUnit)
+        do Pop=1,nTePop
+          if (nRecTe(Pop).eq.0) then
+            nRecTe(Pop) = CountLines(PhenoTeFile(Pop))
+          end if
+        end do
+
+        i=maxval(nRecTe(:))
+        allocate(IdTe(i))
+        allocate(GenosTe(i,nMar))
+        allocate(PhenoTe(i))
+        allocate(BvEst(i))
+
+        do Pop=1,nTePop
+
+          open(newunit=GenoTeUnit,file=trim(GenoTeFile(Pop)),status="old")
+          open(newunit=PhenoTeUnit,file=trim(PhenoTeFile(Pop)),status="old")
+
+          do i=1,nRecTe(Pop)
+            read(GenoTeUnit,*) IdTe(i),GenosTe(i,:)
+            read(PhenoTeUnit,*) DumC,PhenoTe(i)
+            if (trim(DumC).ne.trim(IdTe(i))) then
+              write(STDERR,"(a,i)") " ERROR: Individual identifications in the genotype and phenotype files do not match in prediction set ",Pop
+              write(STDERR,"(a,i)") " ERROR: Line: ",i
+              write(STDERR,"(a,a)") " ERROR: Genotype file identification: ",trim(DumC)
+              write(STDERR,"(a,a)") " ERROR: Phenotype file identification: ",trim(IdTr(i))
+              write(STDERR,"(a)") " "
+              stop 1
+            end if
+          end do
+
+          do j=1,nMar
+            ! Fix any odd data
+            do i=1,nRecTe(Pop)
+              if ((GenosTe(i,j).lt.0.0).or.(GenosTe(i,j).gt.2.0)) then
+                GenosTe(i,j)=2.0d0*AlleleFreq(j)
+              end if
+            end do
+
+            ! Standardize
+
+            ! ... center
+            GenosTe(:,j)=GenosTe(:,j)-(2.0d0*AlleleFreq(j))
+
+            ! ... scale
+            ! no need because we scaled the marker solutions
+          end do
+
+          close(GenoTeUnit)
+          close(PhenoTeUnit)
+
+          File="PredictionsForSetPredict"//Int2Char(Pop)//".txt"
+          open(newunit=Unit,file=trim(File),status="unknown")
+          call gemv(A=GenosTe(1:nRecTe(Pop),:),x=MarEst,y=BvEst(1:nRecTe(Pop)))
+          write(Unit,"(a20,2(1x,a20))") "Id","Observed","Estimate"
+          do i=1,nRecTe(Pop)
+            write(Unit,"(a20,2(1x,f20.10))") IdTe(i),PhenoTe(i),BvEst(i)
+          end do
+          flush(Unit)
+          close(Unit)
+
+          Cors=cor(PhenoTe(1:nRecTe(Pop)),BvEst(1:nRecTe(Pop)))
+          DumC="Predict"//Int2Char(Pop)
+          write(SummaryUnit,"(a14,3(1x,f12.4),3(1x,f20.10))") adjustl(DumC),Cors%Cor,Cors%Cov/Cors%Var2,Cors%Cov/Cors%Var1,Cors%Cov,Cors%Var1,Cors%Var2
+
+          ! open(newunit=GenoTeUnit,file="GenoTest"//Int2Char(Pop)//"Processed.txt",status="unknown")
+          ! open(newunit=PhenoTeUnit,file="PhenoTest"//Int2Char(Pop)//"Processed.txt",status="unknown")
+          ! do i=1,nRecTe(Pop)
+          !   write(GenoTeUnit,"("//Int2Char(nMar)//"(1x,f20.16))") GenosTe(i,:)
+          !   write(PhenoTeUnit,*) PhenoTe(i)
+          ! end do
+          ! flush(GenoTeUnit)
+          ! close(GenoTeUnit)
+          ! flush(PhenoTeUnit)
+          ! close(PhenoTeUnit)
+        end do
+
+        deallocate(IdTe)
+        deallocate(GenosTe)
+        deallocate(PhenoTe)
+        deallocate(BvEst)
+
+        flush(SummaryUnit)
+        close(SummaryUnit)
+
+      end if
     end subroutine
 
     !###########################################################################
