@@ -731,7 +731,7 @@ module AlphaBayesModule
           Eps=Eps+Diff*Diff
         end do
 
-        ! Recompute residuals to avoid rounding errors
+        ! Recompute working residuals to avoid rounding errors
         if (mod(Iter,100).eq.0) then
           call gemv(A=GenosTr,x=MarEst,y=BvEst)
           Err=PhenoTr-MuEst-BvEst
@@ -755,7 +755,7 @@ module AlphaBayesModule
       flush(Unit)
       close(Unit)
 
-      ! Recalculate breeding values and residuals for later use
+      ! Recalculate breeding values and working residuals for later use
       if (nGenoPart.gt.0.or.EstimationMethod.eq."RidgeSample") then
         call gemv(A=GenosTr,x=MarEst/ScaleCoef*SdY,y=BvEst)
         Err=PhenoTr-MuEst-BvEst
@@ -925,7 +925,7 @@ module AlphaBayesModule
           end if
         end if
 
-        ! Recompute residuals to avoid rounding errors
+        ! Recompute working residuals to avoid rounding errors
         if (mod(Iter,100).eq.0) then
           call gemv(A=GenosTr,x=MarSamp,y=BvSamp)
           Err=PhenoTr-MuSamp-BvSamp

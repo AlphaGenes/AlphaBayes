@@ -297,7 +297,7 @@ NumberOfGenomePartitions
   NumberOfGenomePartitions , [Value]
   NumberOfGenomePartitions , 2
 
-NumberOfGenomePartitions specifies how many genome partitions |AB| should evaluate. Genome partition is simply a fitted/predicted value for a group of markers. Default spceification is 0.
+NumberOfGenomePartitions specifies how many genome partitions should |AB| evaluate. Genome partition is simply a fitted/predicted value for a group of markers. Default spceification is 0.
 
 GenomePartitionFile
 -------------------
@@ -307,7 +307,7 @@ GenomePartitionFile
   GenomePartitionFile , [String]
   GenomePartitionFile , GenomePartition.txt
 
-GenomePartitionFile specifies a file that contains markers used for a genomic prediction. The file should simply contain a list of marker numbers with one marker per line. The marker number refers to a column in genotype files, i.e., `GenotypeTrainFile_` (e.g., marker number 2 refers to the scond marker genotype, which is the third column in a genotype file. In case there are several genome partitions use several GenomePartitionFile specifications, e.g., for two genome partitions use:
+GenomePartitionFile specifies a file that contains markers used for genome partitions. The file should simply contain a list of marker numbers with one marker number per line. The marker number refers to a column in genotype files, i.e., `GenotypeTrainFile_`. For example, marker number 2 refers to the scond marker genotype, which is the third column in a genotype file. In case there are several genome partitions use several GenomePartitionFile specifications, e.g., for two genome partitions use specification shown below. Note that markers should not be repeated in different partitions - |AB| does not check for this!
 
 ::
 
@@ -326,33 +326,32 @@ Stop ends the specification file. Any specifications following Stop are ignored.
 Output files
 =========================================================================================
 
-PredictionsForSet*.txt
+ParamEstimate.txt
+------------------
+
+Holds "Param" effect estimates.
+
+ParamSamples.txt
+----------------
+
+Holds "Param" posterior samples. Produced when MCMC algorithm is used.
+
+PredictionsForSetX.txt
 ----------------------
 
-TODO.
-
-::
-
-  TODO
-  ...
+Holds predictions for individuals in the set "X".
 
 PredictionsSummary.txt
-ResidualVarianceEstimate.txt
-ResidualVarianceSamples.txt
-SnpEstimate.txt
-SnpSamples.txt
-SnpVarianceEstimate.txt
-SnpVarianceSamples.txt
+----------------------
 
-GenomePartition1Estimate.txt
-GenomePartition1Samples.txt
+Holds descriptive staistics about predictions - correlation between true and predicted values as well as regression of one on another.
 
-GenomePartitionRemainderEstimate.txt
-GenomePartitionRemainderSamples.txt
+GenomePartitionN.txt
+--------------------
+
+Holds estimates/predictions or samples for genome partition "N". The "Remainder" partition covers all markers that have not been allocated to any other partition.
 
 Examples
 =========================================================================================
 
-There is an example shipped with |AB| that demonstrate its use.
-
-TODO
+There is an example shipped with |AB| that demonstrates use.
