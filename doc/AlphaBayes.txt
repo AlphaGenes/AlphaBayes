@@ -111,15 +111,15 @@ PhenotypeTrainFile specifies a file that contains phenotypes used in training. T
   id3  95.7
   id4  77.8
 
-NumberOfPredictionSets
-----------------------
+NumberOfPredictSets
+-------------------
 
 ::
 
-  NumberOfPredictionSets , [Value]
-  NumberOfPredictionSets , 2
+  NumberOfPredictSets , [Value]
+  NumberOfPredictSets , 2
 
-NumberOfPredictionSets specifies the number of prediction datasets. See `GenotypePredictFile`_ and `PhenotypePredictFile`_.
+NumberOfPredictSets specifies the number of prediction datasets. See `GenotypePredictFile`_ and `PhenotypePredictFile`_.
 
 GenotypePredictFile
 -------------------
@@ -129,7 +129,7 @@ GenotypePredictFile
   GenotypePredictFile , [String]
   GenotypePredictFile , GenotypePredict.txt
 
-GenotypePredictFile specifies a file that contains marker genotypes used in prediction. See `GenotypeTrainFile`_ for format details. This is for one prediction set. In case there are several prediction sets set `NumberOfPredictionSets_` and use several GenotypePredictFile specifications, e.g., for two prediction sets use:
+GenotypePredictFile specifies a file that contains marker genotypes used in prediction. See `GenotypeTrainFile`_ for format details. This is for one prediction set. In case there are several prediction sets set `NumberOfPredictSets_` and use several GenotypePredictFile specifications, e.g., for two prediction sets use:
 
 ::
 
@@ -179,7 +179,7 @@ NumberOfPredictRecords
   NumberOfPredictRecords , [Value]
   NumberOfPredictRecords , 100
 
-NumberOfPredictRecords specifies the number of prediction records used. When this specification is not given all records in predictions files are used. In case there are several prediction sets use several PhenotypePredictFile specifications, e.g., for two prediction sets use:
+NumberOfPredictRecords specifies the number of prediction records used. When this specification is not given all records in prediction files are used. In case there are several prediction sets use several NumberOfPredictRecords specifications, e.g., for two prediction sets use:
 
 ::
 

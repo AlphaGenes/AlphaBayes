@@ -198,7 +198,7 @@ module AlphaBayesModule
                 stop 1
               end if
 
-            case ("numberofpredictionsets")
+            case ("numberofpredictsets")
               if (allocated(Second)) then
                 if (ToLower(trim(adjustl(Second(1)))) .ne. "0") then
                   nTePop = Char2Int(trim(adjustl(Second(1))))
@@ -211,7 +211,7 @@ module AlphaBayesModule
                   end if
                 end if
               else
-                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfPredictionSets, i.e., NumberOfPredictionSets, 2"
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfPredictSets, i.e., NumberOfPredictSets, 2"
                 write(STDERR, "(a)") " "
                 stop 1
               end if
@@ -220,7 +220,7 @@ module AlphaBayesModule
               if (allocated(Second)) then
                 GTePop = GTePop + 1
                 if (GTePop .gt. nTePop) then
-                  write(STDERR, "(a)") " ERROR: Too many GenotypePredictFile specifications vs. NumberOfPredictionSets"
+                  write(STDERR, "(a)") " ERROR: Too many GenotypePredictFile specifications vs. NumberOfPredictSets"
                   write(STDERR, "(a)") " "
                   stop 1
                 end if
@@ -239,7 +239,7 @@ module AlphaBayesModule
               if (allocated(Second)) then
                 PTePop = PTePop + 1
                 if (PTePop .gt. nTePop) then
-                  write(STDERR, "(a)") " ERROR: Too many PhenotypePredictFile specifications vs. NumberOfPredictionSets"
+                  write(STDERR, "(a)") " ERROR: Too many PhenotypePredictFile specifications vs. NumberOfPredictSets"
                   write(STDERR, "(a)") " "
                   stop 1
                 end if
@@ -280,11 +280,11 @@ module AlphaBayesModule
                 stop 1
               end if
 
-            case ("numberofpredictionrecords")
+            case ("numberofpredictrecords")
               if (allocated(Second)) then
                 nAnisTeI = nAnisTeI + 1
                 if (nAnisTeI .gt. nTePop) then
-                  write(STDERR, "(a)") " ERROR: Too many NumberOfPredictionRecords specifications vs. NumberOfPredictionSets"
+                  write(STDERR, "(a)") " ERROR: Too many NumberOfPredictRecords specifications vs. NumberOfPredictSets"
                   write(STDERR, "(a)") " "
                   stop 1
                 end if
@@ -293,7 +293,7 @@ module AlphaBayesModule
                   write(STDOUT, "(a)") " Number of prediction records: "//trim(Int2Char(nAnisTe(nAnisTeI)))
                 end if
               else
-                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfPredictionRecords, i.e., NumberOfPredictionRecords, 100"
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfPredictRecords, i.e., NumberOfPredictRecords, 100"
                 write(STDERR, "(a)") " "
                 stop 1
               end if
