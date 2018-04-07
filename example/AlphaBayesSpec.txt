@@ -1,21 +1,24 @@
-PhenotypeTrainFile       , PhenoTrain.csv
-NumberOfTrainRecords     , 215
-CovariateTrainFile       , CovariatesTrain.csv
-NumberOfCovariates       , 1
-GenotypeTrainFile        , GenoTrain.csv
-NumberOfMarkers          , 2920
-NumberOfPredictSets      , 2
-GenotypePredictFile      , GenoTest1.csv
-PhenotypePredictFile     , PhenoTest1.csv
-GenotypePredictFile      , GenoTest2.csv
-PhenotypePredictFile     , PhenoTest2.csv
-NumberOfGenomePartitions , 2
-GenomePartitionFile      , GenomePartition1.txt
-GenomePartitionFile      , GenomePartition2.txt
-NumberOfIterations       , 1000
-NumberOfBurninIterations ,  100
-
+PhenotypeTrainFile        , PhenoTrain.csv
+NumberOfTrainRecords      , 215
+CovariateTrainFile        , CovariatesTrain.csv
+NumberOfCovariates        , 1
+FixedEffectTrainFile      , FixedEffectsTrain.csv
+NumberOfFixedEffectLevels , 2
+GenotypeTrainFile         , GenoTrain.csv
+NumberOfMarkers           , 2920
+NumberOfPredictSets       , 2
+GenotypePredictFile       , GenoTest1.csv
+PhenotypePredictFile      , PhenoTest1.csv
+GenotypePredictFile       , GenoTest2.csv
+PhenotypePredictFile      , PhenoTest2.csv
+NumberOfGenomePartitions  , 2
+GenomePartitionFile       , GenomePartition1.txt
+GenomePartitionFile       , GenomePartition2.txt
+NumberOfIterations        , 1000
+NumberOfBurninIterations  ,  100
+EstimationMethod          , RidgeSample
+EstimateVariances         , No
 Stop
 
-EstimationMethod         , RidgeSample
-EstimateVariances        , No
+
+

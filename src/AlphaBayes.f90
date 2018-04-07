@@ -79,8 +79,7 @@ module AlphaBayesModule
   real(real64),allocatable :: CovarEst(:),FixedEst(:),RandomEst(:),MarEst(:),BvEst(:)
   real(real64),allocatable :: CovarMean(:),CovarVar(:),CovarSd(:)
   real(real64),allocatable :: XpXCovar(:),XpXFixed(:),XpXRandom(:),XpXMar(:)
-  real(real64),allocatable :: FixedTr(:),RandomTr(:)
-  real(real64),allocatable :: CovarTr(:,:),GenosTr(:,:)
+  real(real64),allocatable :: FixedTr(:,:),RandomTr(:,:),CovarTr(:,:),GenosTr(:,:)
 
   character(len=FILELENGTH) :: GenoTrFile,PhenoTrFile,CovarTrFile,FixedTrFile,EstimationMethod
   character(len=FILELENGTH),allocatable :: GenoTeFile(:),PhenoTeFile(:),GenoPartFile(:),RandomTrFile(:)
@@ -99,13 +98,17 @@ module AlphaBayesModule
   CHARACTER(LEN=100),PARAMETER :: COVARIATEESTIMATEFILE="CovariateEstimate.txt"
   CHARACTER(LEN=100),PARAMETER :: COVARIATESAMPLESFILE="CovariateSamples.txt"
 
+  CHARACTER(LEN=100),PARAMETER :: FIXEDEFFECTESTIMATEFILE="FixedEffectEstimate.txt"
+  CHARACTER(LEN=100),PARAMETER :: FIXEDEFFECTSAMPLESFILE="FixedEffectSamples.txt"
+
   CHARACTER(LEN=100),PARAMETER :: MARKERESTIMATEFILE="MarkerEstimate.txt"
   CHARACTER(LEN=100),PARAMETER :: MARKERSAMPLESFILE="MarkerSamples.txt"
 
-  CHARACTER(LEN=100),PARAMETER :: RESIDUALVARIANCEESTIMATEFILE="ResidualVarianceEstimate.txt"
-  CHARACTER(LEN=100),PARAMETER :: RESIDUALVARIANCESAMPLESFILE="ResidualVarianceSamples.txt"
   CHARACTER(LEN=100),PARAMETER :: MARKERVARIANCEESTIMATEFILE="MarkerVarianceEstimate.txt"
   CHARACTER(LEN=100),PARAMETER :: MARKERVARIANCESAMPLESFILE="MarkerVarianceSamples.txt"
+
+  CHARACTER(LEN=100),PARAMETER :: RESIDUALVARIANCEESTIMATEFILE="ResidualVarianceEstimate.txt"
+  CHARACTER(LEN=100),PARAMETER :: RESIDUALVARIANCESAMPLESFILE="ResidualVarianceSamples.txt"
 
   CHARACTER(LEN=100),PARAMETER :: GENOPARTFILESTART="GenomePartition"
   CHARACTER(LEN=100),PARAMETER :: GENOPARTESTIMATEFILEEND="Estimate.txt"
@@ -252,6 +255,34 @@ module AlphaBayesModule
                 end if
               else
                 write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfCovariates, i.e., NumberOfCovariates, 2"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("fixedeffecttrainfile")
+              if (allocated(Second)) then
+                FixedTrFileGiven = .true.
+                write(FixedTrFile, *) trim(adjustl(Second(1)))
+                FixedTrFile = adjustl(FixedTrFile)
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Fixed effect train file: "//trim(FixedTrFile)
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a file for FixedEffectTrainFile, i.e., FixedEffectTrainFileTrainFile, FixedEffectsTrain.txt"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("numberoffixedeffectlevels")
+              if (allocated(Second)) then
+                if (ToLower(trim(adjustl(Second(1)))) .ne. "0") then
+                  nFixed = Char2Int(trim(adjustl(Second(1))))
+                  if (LogStdoutInternal) then
+                    write(STDOUT, "(a)") " Number of fixed effect levels: "//trim(Int2Char(nFixed))
+                  end if
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfFixedEffectLevels, i.e., NumberOfFixedEffectLevels, 2"
                 write(STDERR, "(a)") " "
                 stop 1
               end if
@@ -538,6 +569,12 @@ module AlphaBayesModule
         stop 1
       end if
 
+      if (FixedTrFileGiven .and. nFixed .eq. 0) then
+        write(STDERR, "(a)") " ERROR: Must specify number of levels in the fixed effects file, i.e., NumberOfFixedEffectLevels, 2"
+        write(STDERR, "(a)") " "
+        stop 1
+      end if
+
       if (GenoTrFileGiven .and. nMar .eq. 0) then
         write(STDERR, "(a)") " ERROR: Must specify number of markers in the genotype file, i.e., NumberOfMarkers, 100"
         write(STDERR, "(a)") " "
@@ -553,7 +590,8 @@ module AlphaBayesModule
     subroutine ReadData
       implicit none
 
-      integer(int32) :: i,j,nNotMissing,PhenoTrUnit,CovarTrUnit,GenoTrUnit,Unit!,AlleleFreqUnit
+      integer(int32) :: i,j,nNotMissing,PhenoTrUnit,CovarTrUnit,FixedTrUnit
+      integer(int32) :: RandomTrUnit,GenoTrUnit,Unit!,AlleleFreqUnit
 
       character(len=100) :: DumC
 
@@ -575,6 +613,11 @@ module AlphaBayesModule
         allocate(CovarVar(nCovar))
         allocate(CovarSd(nCovar))
         open(newunit=CovarTrUnit,file=trim(CovarTrFile),status="old")
+      end if
+      if (nFixed.gt.0) then
+        open(newunit=FixedTrUnit,file=trim(FixedTrFile),status="old")
+        allocate(FixedTr(nRecTr,nFixed))
+        allocate(FixedEst(nFixed))
       end if
       if (nMar.gt.0) then
         allocate(GenosTr(nRecTr,nMar))
@@ -599,6 +642,17 @@ module AlphaBayesModule
             stop 1
           end if
         end if
+        if (nFixed.gt.0) then
+          read(FixedTrUnit,*) DumC,FixedTr(i,:)
+          if (trim(IdTr(i)).ne.trim(DumC)) then
+            write(STDERR,"(a)") " ERROR: Individual identifications in the phenotype and fixed effect files do not match"
+            write(STDERR,"(a,i)") " ERROR: Line: ",i
+            write(STDERR,"(a,a)") " ERROR: Phenotype file identification: ",trim(IdTr(i))
+            write(STDERR,"(a,a)") " ERROR: Fixed effect file identification: ",trim(DumC)
+            write(STDERR,"(a)") " "
+            stop 1
+          end if
+        end if
         if (nMar.gt.0) then
           read(GenoTrUnit,*) DumC,GenosTr(i,:)
           if (trim(IdTr(i)).ne.trim(DumC)) then
@@ -614,6 +668,9 @@ module AlphaBayesModule
       close(GenoTrUnit)
       if (nCovar.gt.0) then
         close(CovarTrUnit)
+      end if
+      if (nFixed.gt.0) then
+        close(FixedTrUnit)
       end if
       if (nMar.gt.0) then
         close(PhenoTrUnit)
@@ -633,7 +690,6 @@ module AlphaBayesModule
           CovarTr(:,i)=(CovarTr(:,i)-CovarMean(i))/CovarSd(i)
         end do
       end if
-
       if (nMar.gt.0) then
         SumExpVarX=0.0d0
         SumObsVarX=0.0d0
@@ -754,6 +810,12 @@ module AlphaBayesModule
           XpXCovar(j)=dot(x=CovarTr(:,j),y=CovarTr(:,j)) + tiny(CovarTr(1,1))
         end do
       end if
+      if (nFixed.gt.0) then
+        allocate(XpXFixed(nFixed))
+        do j=1,nFixed
+          XpXFixed(j)=dot(x=FixedTr(:,j),y=FixedTr(:,j)) + tiny(FixedTr(1,1))
+        end do
+      end if
       if (nMar.gt.0) then
         allocate(XpXMar(nMar))
         do j=1,nMar
@@ -807,6 +869,10 @@ module AlphaBayesModule
         CovarEst=0.0d0
         XpXCovar=XpXCovar/VarErr ! can do it only once for all rounds!!!
       end if
+      if (nFixed.gt.0) then
+        FixedEst=0.0d0
+        XpXFixed=XpXFixed/VarErr ! can do it only once for all rounds!!!
+      end if
       if (nMar.gt.0) then
         MarEst=0.0d0
         XpXMar=XpXMar/VarErr ! can do it only once for all rounds!!!
@@ -826,6 +892,21 @@ module AlphaBayesModule
         Err=Err-Diff
         MuEst=Sol
         Eps=Eps+Diff*Diff
+
+        ! Fixed effects
+        if (nFixed.gt.0) then
+          RandomOrdering(1:nFixed)=RandomOrder(nFixed)
+          do j=1,nFixed
+            k=RandomOrdering(j)
+            Lhs=XpXFixed(k)
+            Rhs=dot(x=FixedTr(:,k),y=Err)/VarErr + XpXFixed(k)*FixedEst(k)
+            Sol=Rhs/Lhs
+            Diff=Sol-FixedEst(k)
+            Err=Err-FixedTr(:,k)*Diff
+            FixedEst(k)=Sol
+            Eps=Eps+Diff*Diff
+          end do
+        end if
 
         ! Covariates
         if (nCovar.gt.0) then
@@ -864,6 +945,10 @@ module AlphaBayesModule
             call gemv(A=CovarTr,x=CovarEst,y=BvEst)
             Err=Err-BvEst
           end if
+          if (nFixed.gt.0) then
+            call gemv(A=FixedTr,x=FixedEst,y=BvEst)
+            Err=Err-BvEst
+          end if
           if (nMar.gt.0) then
             call gemv(A=GenosTr,x=MarEst,y=BvEst)
             Err=Err-BvEst
@@ -885,6 +970,15 @@ module AlphaBayesModule
         open(newunit=Unit,file=COVARIATEESTIMATEFILE,status="unknown")
         do i=1,nCovar
           write(Unit,*) CovarEst(i)/CovarSd(i)*PhenSd
+        end do
+        flush(Unit)
+        close(Unit)
+      end if
+
+      if (nFixed.gt.0) then
+        open(newunit=Unit,file=FIXEDEFFECTESTIMATEFILE,status="unknown")
+        do i=1,nFixed
+          write(Unit,*) FixedEst(i)*PhenSd
         end do
         flush(Unit)
         close(Unit)
@@ -926,6 +1020,9 @@ module AlphaBayesModule
         if (nCovar.gt.0) then
           XpXCovar=XpXCovar*VarErr
         end if
+        if (nFixed.gt.0) then
+          XpXFixed=XpXFixed*VarErr
+        end if
         if (nMar.gt.0) then
           XpXMar=XpXMar*VarErr
         end if
@@ -953,11 +1050,14 @@ module AlphaBayesModule
       real(real64),allocatable :: GaussDevRandom(:),GaussDevMar(:)
       real(real64),allocatable :: GammaDevRandom(:),GammaDevMar(:),GammaDevErr(:)
 
-      character(len=100) :: CovarSampFmt,MarSampFmt,BvSampFmt
+      character(len=100) :: CovarSampFmt,FixedSampFmt,RandomSampFmt,MarSampFmt,BvSampFmt
 
       BvSampFmt="("//trim(Int2Char(nRecTr))//trim("f)")
       if (nCovar.gt.0) then
         CovarSampFmt="("//trim(Int2Char(nCovar))//trim("f)")
+      end if
+      if (nFixed.gt.0) then
+        FixedSampFmt="("//trim(Int2Char(nFixed))//trim("f)")
       end if
       if (nMar.gt.0) then
         MarSampFmt="("//trim(Int2Char(nMar))//trim("f)")
@@ -966,6 +1066,9 @@ module AlphaBayesModule
       allocate(GaussDevMu(nIter))
       if (nCovar.gt.0) then
         allocate(CovarSamp(nCovar))
+      end if
+      if (nFixed.gt.0) then
+        allocate(FixedSamp(nFixed))
       end if
       if (nMar.gt.0) then
         allocate(MarSamp(nMar))
@@ -990,6 +1093,10 @@ module AlphaBayesModule
       if (nCovar.gt.0) then
         CovarEst=0.0d0
         CovarSamp=0.0d0
+      end if
+      if (nFixed.gt.0) then
+        FixedEst=0.0d0
+        FixedSamp=0.0d0
       end if
       if (nMar.gt.0) then
         MarEst=0.0d0
@@ -1043,6 +1150,9 @@ module AlphaBayesModule
       if (nCovar.gt.0) then
         open(newunit=CovarUnit,file=COVARIATESAMPLESFILE,status="unknown")
       end if
+      if (nFixed.gt.0) then
+        open(newunit=FixedUnit,file=FIXEDEFFECTSAMPLESFILE,status="unknown")
+      end if
       if (nMar.gt.0) then
         open(newunit=MarUnit,file=MARKERSAMPLESFILE,status="unknown")
       end if
@@ -1090,6 +1200,25 @@ module AlphaBayesModule
           if (Iter.gt.nBurn) then
             write(CovarUnit,CovarSampFmt) CovarSamp/CovarSd*PhenSd
             CovarEst=CovarEst+CovarSamp/nSampR
+          end if
+        end if
+
+        ! Fixed effects
+        if (nFixed.gt.0) then
+          RandomOrdering(1:nFixed)=RandomOrder(nFixed)
+          GaussDevFixed=SampleIntelGaussD(n=nFixed)
+          do j=1,nFixed
+            k=RandomOrdering(j)
+            Lhs=XpXFixed(k)/VarErrSamp
+            Rhs=dot(x=FixedTr(:,k),y=Err)/VarErrSamp + XpXFixed(k)*FixedSamp(k)/VarErrSamp
+            Sol=Rhs/Lhs + GaussDevFixed(j)/sqrt(Lhs)
+            Diff=Sol-FixedSamp(k)
+            Err=Err-FixedTr(:,k)*Diff
+            FixedSamp(k)=Sol
+          end do
+          if (Iter.gt.nBurn) then
+            write(FixedUnit,FixedSampFmt) FixedSamp*PhenSd
+            FixedEst=FixedEst+FixedSamp/nSampR
           end if
         end if
 
@@ -1143,6 +1272,10 @@ module AlphaBayesModule
             call gemv(A=CovarTr,x=CovarSamp,y=BvSamp)
             Err=Err-BvSamp
           end if
+          if (nFixed.gt.0) then
+            call gemv(A=FixedTr,x=FixedSamp,y=BvSamp)
+            Err=Err-BvSamp
+          end if
           if (nMar.gt.0) then
             call gemv(A=GenosTr,x=MarSamp,y=BvSamp)
             Err=Err-BvSamp
@@ -1163,6 +1296,10 @@ module AlphaBayesModule
       if (nCovar.gt.0) then
         flush(CovarUnit)
         close(CovarUnit)
+      end if
+      if (nFixed.gt.0) then
+        flush(FixedUnit)
+        close(FixedUnit)
       end if
       if (nMar.gt.0) then
         flush(MarUnit)
@@ -1193,6 +1330,15 @@ module AlphaBayesModule
         open(newunit=Unit,file=COVARIATEESTIMATEFILE,status="unknown")
         do i=1,nCovar
           write(Unit,*) CovarEst(i)/CovarSd(i)*PhenSd
+        end do
+        flush(Unit)
+        close(Unit)
+      end if
+
+      if (nFixed.gt.0) then
+        open(newunit=Unit,file=FIXEDEFFECTESTIMATEFILE,status="unknown")
+        do i=1,nFixed
+          write(Unit,*) FixedEst(i)*PhenSd
         end do
         flush(Unit)
         close(Unit)
@@ -1252,6 +1398,10 @@ module AlphaBayesModule
       if (nCovar.gt.0) then
         deallocate(CovarSamp)
         deallocate(GaussDevCovar)
+      end if
+      if (nFixed.gt.0) then
+        deallocate(FixedSamp)
+        deallocate(GaussDevFixed)
       end if
       if (nMar.gt.0) then
         deallocate(MarSamp)

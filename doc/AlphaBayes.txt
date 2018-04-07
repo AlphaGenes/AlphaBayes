@@ -129,7 +129,46 @@ NumberOfCovariates
   NumberOfCovariates , [Value]
   NumberOfCovariates , 2
 
-NumberOfCovariates specifies the number of covariates in `CovariateTrainFile`_ and `PhenotypePredictFile`_. This specification must be given if `CovariateTrainFile`_ is specified!
+NumberOfCovariates specifies the number of covariates in `CovariateTrainFile`_. This specification must be given if `CovariateTrainFile`_ is specified!
+
+FixedEffectTrainFile
+--------------------
+
+::
+
+  FixedEffectTrainFile , [String]
+  FixedEffectTrainFile , FixedEffectsTrain.txt
+
+FixedEffectTrainFile specifies a file that contains a file with fixed effect factors used in training. The file should have *1 + nL* columns, where the first column are individual identifications and *nL* is number of levels of all factors, and *nR* rows, where *nR* is number of records. See `NumberOfTrainRecords`_ to specify number of rows. Columns can be separated by space, tab, or comma. Factor levels must be provided as dummy codes and no checking is done about them! An example for four individuals with three levels for the first factor and two levels for the second factor with dummy coding that provides estimates that sum to zero is shown below. The result is three columns with three estimable levels. If you are struggling to understand all this or prepare it yourself, use a tool like "model.matrix" in R. Note also that |AB| always fits intercept, so you need to take this into account. An R code to do all this would be like this:
+
+::
+
+  # Construct model matrix (here sum to zero dummy coding is chosen, but others are also valid)
+  X = model.matrix(~ 1 + Effect1 + Effect2,
+                   data = YourDataFrame,
+                   contrasts = list(Effect1 = "contr.sum", Effect2 = "contr.sum"))
+  # Prepare the file
+  #   * first column must be individual identifications
+  #   * note that intercept is removed from X
+  write.csv(x=cbind(YourDataFrame$Id, X[, -1]), file = "FixedEffects.csv",
+            row.names = FALSE, col.names = FALSE)
+
+::
+
+  id1  1  0  1
+  id2  0  1 -1
+  id3 -1 -1  1
+  id4  1  0 -1
+
+NumberOfFixedEffectLevels
+-------------------------
+
+::
+
+  NumberOfFixedEffectLevels , [Value]
+  NumberOfFixedEffectLevels , 2
+
+NumberOfFixedEffectLevels specifies the number of fixed effect levels in `FixedEffectTrainFile`_. This specification must be given if `FixedEffectTrainFile`_ is specified! Note that this is the number of estimable levels!!!
 
 GenotypeTrainFile
 -----------------
