@@ -81,8 +81,8 @@ module AlphaBayesModule
   real(real64),allocatable :: XpXCovar(:),XpXFixed(:),XpXRandom(:),XpXMar(:)
   real(real64),allocatable :: FixedTr(:,:),RandomTr(:,:),CovarTr(:,:),GenosTr(:,:)
 
-  character(len=FILELENGTH) :: GenoTrFile,PhenoTrFile,CovarTrFile,FixedTrFile,EstimationMethod
-  character(len=FILELENGTH),allocatable :: GenoTeFile(:),PhenoTeFile(:),GenoPartFile(:),RandomTrFile(:)
+  character(len=FILELENGTH) :: GenoTrFile,PhenoTrFile,CovarTrFile,FixedTrFile,RandomTrFile,EstimationMethod
+  character(len=FILELENGTH),allocatable :: GenoTeFile(:),PhenoTeFile(:),GenoPartFile(:)
   character(len=IDLENGTH),allocatable :: IdTr(:)
 
   logical :: EstimateVariances
@@ -100,6 +100,12 @@ module AlphaBayesModule
 
   CHARACTER(LEN=100),PARAMETER :: FIXEDEFFECTESTIMATEFILE="FixedEffectEstimate.txt"
   CHARACTER(LEN=100),PARAMETER :: FIXEDEFFECTSAMPLESFILE="FixedEffectSamples.txt"
+
+  CHARACTER(LEN=100),PARAMETER :: RANDOMEFFECTESTIMATEFILE="RandomEffectEstimate.txt"
+  CHARACTER(LEN=100),PARAMETER :: RANDOMEFFECTSAMPLESFILE="RandomEffectSamples.txt"
+
+  CHARACTER(LEN=100),PARAMETER :: RANDOMEFFECTVARIANCEESTIMATEFILE="RandomEffectVarianceEstimate.txt"
+  CHARACTER(LEN=100),PARAMETER :: RANDOMEFFECTVARIANCESAMPLESFILE="RandomEffectVarianceSamples.txt"
 
   CHARACTER(LEN=100),PARAMETER :: MARKERESTIMATEFILE="MarkerEstimate.txt"
   CHARACTER(LEN=100),PARAMETER :: MARKERSAMPLESFILE="MarkerSamples.txt"
@@ -143,6 +149,8 @@ module AlphaBayesModule
 
       integer(int32) :: SpecUnit, Stat, GTePop, PTePop, nRecTeI, GenoPart
 
+      real(real64) :: TmpR
+
       logical :: LogStdoutInternal, PhenoTrFileGiven, CovarTrFileGiven, FixedTrFileGiven
       logical :: RandomTrFileGiven, GenoTrFileGiven
 
@@ -179,8 +187,9 @@ module AlphaBayesModule
       nRecTeI = 0
       nIter = 10000
       nBurn = 1000
-      VarBv = 0.5
-      VarErr = 0.5
+      VarRandom = -1.0d0
+      VarBv = -1.0d0
+      VarErr = -1.0d0
       nProcessor = 1
       GenoScaleMethod = 4
       EstimationMethod = "RidgeSolve"
@@ -268,7 +277,7 @@ module AlphaBayesModule
                   write(STDOUT, "(a)") " Fixed effect train file: "//trim(FixedTrFile)
                 end if
               else
-                write(STDERR, "(a)") " ERROR: Must specify a file for FixedEffectTrainFile, i.e., FixedEffectTrainFileTrainFile, FixedEffectsTrain.txt"
+                write(STDERR, "(a)") " ERROR: Must specify a file for FixedEffectTrainFile, i.e., FixedEffectTrainFile, FixedEffectsTrain.txt"
                 write(STDERR, "(a)") " "
                 stop 1
               end if
@@ -283,6 +292,34 @@ module AlphaBayesModule
                 end if
               else
                 write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfFixedEffectLevels, i.e., NumberOfFixedEffectLevels, 2"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("randomeffecttrainfile")
+              if (allocated(Second)) then
+                RandomTrFileGiven = .true.
+                write(RandomTrFile, *) trim(adjustl(Second(1)))
+                RandomTrFile = adjustl(RandomTrFile)
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Random effect train file: "//trim(RandomTrFile)
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a file for RandomTrFileEffectTrainFile, i.e., RandomEffectTrainFile, RandomEffectsTrain.txt"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
+            case ("numberofrandomeffectlevels")
+              if (allocated(Second)) then
+                if (ToLower(trim(adjustl(Second(1)))) .ne. "0") then
+                  nRandom = Char2Int(trim(adjustl(Second(1))))
+                  if (LogStdoutInternal) then
+                    write(STDOUT, "(a)") " Number of random effect levels: "//trim(Int2Char(nRandom))
+                  end if
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a number for NumberOfRandomEffectLevels, i.e., NumberOfRandomEffectLevels, 20"
                 write(STDERR, "(a)") " "
                 stop 1
               end if
@@ -575,10 +612,40 @@ module AlphaBayesModule
         stop 1
       end if
 
+      if (RandomTrFileGiven .and. nRandom .eq. 0) then
+        write(STDERR, "(a)") " ERROR: Must specify number of levels in the random effects file, i.e., NumberOfRandomEffectLevels, 20"
+        write(STDERR, "(a)") " "
+        stop 1
+      end if
+
       if (GenoTrFileGiven .and. nMar .eq. 0) then
         write(STDERR, "(a)") " ERROR: Must specify number of markers in the genotype file, i.e., NumberOfMarkers, 100"
         write(STDERR, "(a)") " "
         stop 1
+      end if
+
+      TmpR = 1.0d0
+      if (RandomTrFileGiven .and. VarRandom .lt. 0) then
+        TmpR = TmpR + 1.0d0
+      end if
+      if (GenoTrFileGiven .and. VarBv .lt. 0) then
+        TmpR = TmpR + 1.0d0
+      end if
+
+      if (RandomTrFileGiven .and. VarRandom .lt. 0) then
+        VarRandom = 1.0d0 / TmpR
+        write(STDOUT, "(a)") " NOTE: Variance of the random effect set to: "//trim(Real2Char(VarRandom))
+        write(STDERR, "(a)") " "
+      end if
+      if (GenoTrFileGiven .and. VarBv .lt. 0) then
+        VarBv = 1.0d0 / TmpR
+        write(STDOUT, "(a)") " NOTE: Variance of the genetic effect set to: "//trim(Real2Char(VarBv))
+        write(STDERR, "(a)") " "
+      end if
+      if (VarErr .lt. 0) then
+        VarErr = 1.0d0 / TmpR
+        write(STDOUT, "(a)") " NOTE: Variance of the residual set to: "//trim(Real2Char(VarErr))
+        write(STDERR, "(a)") " "
       end if
 
       nEffMax = maxval([nCovar,nFixed,nRandom,nMar])
@@ -619,6 +686,11 @@ module AlphaBayesModule
         allocate(FixedTr(nRecTr,nFixed))
         allocate(FixedEst(nFixed))
       end if
+      if (nRandom.gt.0) then
+        open(newunit=RandomTrUnit,file=trim(RandomTrFile),status="old")
+        allocate(RandomTr(nRecTr,nRandom))
+        allocate(RandomEst(nRandom))
+      end if
       if (nMar.gt.0) then
         allocate(GenosTr(nRecTr,nMar))
         allocate(MarEst(nMar))
@@ -653,6 +725,17 @@ module AlphaBayesModule
             stop 1
           end if
         end if
+        if (nRandom.gt.0) then
+          read(RandomTrUnit,*) DumC,RandomTr(i,:)
+          if (trim(IdTr(i)).ne.trim(DumC)) then
+            write(STDERR,"(a)") " ERROR: Individual identifications in the phenotype and random effect files do not match"
+            write(STDERR,"(a,i)") " ERROR: Line: ",i
+            write(STDERR,"(a,a)") " ERROR: Phenotype file identification: ",trim(IdTr(i))
+            write(STDERR,"(a,a)") " ERROR: Random effect file identification: ",trim(DumC)
+            write(STDERR,"(a)") " "
+            stop 1
+          end if
+        end if
         if (nMar.gt.0) then
           read(GenoTrUnit,*) DumC,GenosTr(i,:)
           if (trim(IdTr(i)).ne.trim(DumC)) then
@@ -671,6 +754,9 @@ module AlphaBayesModule
       end if
       if (nFixed.gt.0) then
         close(FixedTrUnit)
+      end if
+      if (nRandom.gt.0) then
+        close(RandomTrUnit)
       end if
       if (nMar.gt.0) then
         close(PhenoTrUnit)
@@ -816,6 +902,12 @@ module AlphaBayesModule
           XpXFixed(j)=dot(x=FixedTr(:,j),y=FixedTr(:,j)) + tiny(FixedTr(1,1))
         end do
       end if
+      if (nRandom.gt.0) then
+        allocate(XpXRandom(nRandom))
+        do j=1,nRandom
+          XpXRandom(j)=dot(x=RandomTr(:,j),y=RandomTr(:,j)) + tiny(RandomTr(1,1))
+        end do
+      end if
       if (nMar.gt.0) then
         allocate(XpXMar(nMar))
         do j=1,nMar
@@ -829,15 +921,9 @@ module AlphaBayesModule
     subroutine Analysis
       implicit none
       if (trim(EstimationMethod).eq."RidgeSolve") then
-        write(STDOUT, "(a)") ""
-        write(STDOUT, "(a)") " Running estimation of marker effects with provided variance components"
-        write(STDOUT, "(a)") ""
         call RidgeRegressionSolve
       end if
       if (trim(EstimationMethod).eq."RidgeSample") then
-        write(STDOUT, "(a)") ""
-        write(STDOUT, "(a)") " Running estimation of marker effects and variance components with MCMC"
-        write(STDOUT, "(a)") ""
         call RidgeRegressionSolve
         call RidgeRegressionSample
       end if
@@ -850,8 +936,12 @@ module AlphaBayesModule
 
       integer(int32) :: Iter,i,j,k,RandomOrdering(nEffMax),Unit
 
-      real(real64) :: PreMar,Rhs,Lhs,Sol,Diff,Eps
+      real(real64) :: PreMar,PreRandom,Rhs,Lhs,Sol,Diff,Eps
       real(real64),allocatable :: BvEstGenoPart(:)
+
+      write(STDOUT, "(a)") ""
+      write(STDOUT, "(a)") " Running estimation of marker effects with provided variance components"
+      write(STDOUT, "(a)") ""
 
       allocate(BvEst(nRecTr))
       if (nGenoPart.gt.0) then
@@ -873,6 +963,11 @@ module AlphaBayesModule
         FixedEst=0.0d0
         XpXFixed=XpXFixed/VarErr ! can do it only once for all rounds!!!
       end if
+      if (nRandom.gt.0) then
+        RandomEst=0.0d0
+        XpXRandom=XpXRandom/VarErr ! can do it only once for all rounds!!!
+        PreRandom=1.0d0/VarRandom
+      end if
       if (nMar.gt.0) then
         MarEst=0.0d0
         XpXMar=XpXMar/VarErr ! can do it only once for all rounds!!!
@@ -893,6 +988,21 @@ module AlphaBayesModule
         MuEst=Sol
         Eps=Eps+Diff*Diff
 
+        ! Covariates
+        if (nCovar.gt.0) then
+          RandomOrdering(1:nCovar)=RandomOrder(nCovar)
+          do j=1,nCovar
+            k=RandomOrdering(j)
+            Lhs=XpXCovar(k)
+            Rhs=dot(x=CovarTr(:,k),y=Err)/VarErr + XpXCovar(k)*CovarEst(k)
+            Sol=Rhs/Lhs
+            Diff=Sol-CovarEst(k)
+            Err=Err-CovarTr(:,k)*Diff
+            CovarEst(k)=Sol
+            Eps=Eps+Diff*Diff
+          end do
+        end if
+
         ! Fixed effects
         if (nFixed.gt.0) then
           RandomOrdering(1:nFixed)=RandomOrder(nFixed)
@@ -908,17 +1018,17 @@ module AlphaBayesModule
           end do
         end if
 
-        ! Covariates
-        if (nCovar.gt.0) then
-          RandomOrdering(1:nCovar)=RandomOrder(nCovar)
-          do j=1,nCovar
+        ! Random effects
+        if (nRandom.gt.0) then
+          RandomOrdering(1:nRandom)=RandomOrder(nRandom)
+          do j=1,nRandom
             k=RandomOrdering(j)
-            Lhs=XpXCovar(k)
-            Rhs=dot(x=CovarTr(:,k),y=Err)/VarErr + XpXCovar(k)*CovarEst(k)
+            Lhs=XpXRandom(k) + PreRandom
+            Rhs=dot(x=RandomTr(:,k),y=Err)/VarErr + XpXRandom(k)*RandomEst(k)
             Sol=Rhs/Lhs
-            Diff=Sol-CovarEst(k)
-            Err=Err-CovarTr(:,k)*Diff
-            CovarEst(k)=Sol
+            Diff=Sol-RandomEst(k)
+            Err=Err-RandomTr(:,k)*Diff
+            RandomEst(k)=Sol
             Eps=Eps+Diff*Diff
           end do
         end if
@@ -947,6 +1057,10 @@ module AlphaBayesModule
           end if
           if (nFixed.gt.0) then
             call gemv(A=FixedTr,x=FixedEst,y=BvEst)
+            Err=Err-BvEst
+          end if
+          if (nRandom.gt.0) then
+            call gemv(A=RandomTr,x=RandomEst,y=BvEst)
             Err=Err-BvEst
           end if
           if (nMar.gt.0) then
@@ -979,6 +1093,15 @@ module AlphaBayesModule
         open(newunit=Unit,file=FIXEDEFFECTESTIMATEFILE,status="unknown")
         do i=1,nFixed
           write(Unit,*) FixedEst(i)*PhenSd
+        end do
+        flush(Unit)
+        close(Unit)
+      end if
+
+      if (nRandom.gt.0) then
+        open(newunit=Unit,file=RANDOMEFFECTESTIMATEFILE,status="unknown")
+        do i=1,nRandom
+          write(Unit,*) RandomEst(i)*PhenSd
         end do
         flush(Unit)
         close(Unit)
@@ -1023,6 +1146,9 @@ module AlphaBayesModule
         if (nFixed.gt.0) then
           XpXFixed=XpXFixed*VarErr
         end if
+        if (nRandom.gt.0) then
+          XpXRandom=XpXRandom*VarErr
+        end if
         if (nMar.gt.0) then
           XpXMar=XpXMar*VarErr
         end if
@@ -1038,12 +1164,13 @@ module AlphaBayesModule
       implicit none
 
       integer(int32) :: Iter,i,j,k,RandomOrdering(nEffMax)
-      integer(int32) :: Unit,MuUnit,CovarUnit,FixedUnit,RandomUnit,MarUnit,VarMarUnit,VarErrUnit
+      integer(int32) :: Unit,MuUnit,CovarUnit,FixedUnit,RandomUnit,MarUnit
+      integer(int32) :: VarMarUnit,VarRandomUnit,VarErrUnit
       integer(int32),allocatable :: GenoPartUnit(:)
 
       real(real64) :: TmpR,Rhs,Lhs,Sol,Diff,nSampR
-      real(real64) :: MuSamp,VarErrSamp,VarMarSamp,VarErrEst,VarMarEst
-      real(real64) :: R2,ErrDF0,ErrDF,MarDF0,MarDF,ErrS0,MarS0,MSX
+      real(real64) :: MuSamp,VarRandomSamp,VarRandomEst,VarMarSamp,VarMarEst,VarErrSamp,VarErrEst
+      real(real64) :: R2,RandomDF0,RandomDF,RandomS0,MarDF0,MarDF,MarS0,ErrDF0,ErrDF,ErrS0,MSX
       real(real64),allocatable :: CovarSamp(:),FixedSamp(:),RandomSamp(:),MarSamp(:)
       real(real64),allocatable :: SX2(:),MX2(:),BvSamp(:),BvSampGenoPart(:)
       real(real64),allocatable :: GaussDevMu(:),GaussDevCovar(:),GaussDevFixed(:)
@@ -1052,12 +1179,25 @@ module AlphaBayesModule
 
       character(len=100) :: CovarSampFmt,FixedSampFmt,RandomSampFmt,MarSampFmt,BvSampFmt
 
+      if (EstimateVariances) then
+        write(STDOUT, "(a)") ""
+        write(STDOUT, "(a)") " Running estimation of marker effects and variance components using MCMC"
+        write(STDOUT, "(a)") ""
+      else
+        write(STDOUT, "(a)") ""
+        write(STDOUT, "(a)") " Running estimation of marker effects with provided variance components using MCMC"
+        write(STDOUT, "(a)") ""
+      end if
+
       BvSampFmt="("//trim(Int2Char(nRecTr))//trim("f)")
       if (nCovar.gt.0) then
         CovarSampFmt="("//trim(Int2Char(nCovar))//trim("f)")
       end if
       if (nFixed.gt.0) then
         FixedSampFmt="("//trim(Int2Char(nFixed))//trim("f)")
+      end if
+      if (nRandom.gt.0) then
+        RandomSampFmt="("//trim(Int2Char(nRandom))//trim("f)")
       end if
       if (nMar.gt.0) then
         MarSampFmt="("//trim(Int2Char(nMar))//trim("f)")
@@ -1069,6 +1209,9 @@ module AlphaBayesModule
       end if
       if (nFixed.gt.0) then
         allocate(FixedSamp(nFixed))
+      end if
+      if (nRandom.gt.0) then
+        allocate(RandomSamp(nRandom))
       end if
       if (nMar.gt.0) then
         allocate(MarSamp(nMar))
@@ -1098,6 +1241,11 @@ module AlphaBayesModule
         FixedEst=0.0d0
         FixedSamp=0.0d0
       end if
+      if (nRandom.gt.0) then
+        RandomEst=0.0d0
+        RandomSamp=0.0d0
+        VarRandomEst=0.0d0
+      end if
       if (nMar.gt.0) then
         MarEst=0.0d0
         MarSamp=0.0d0
@@ -1107,13 +1255,29 @@ module AlphaBayesModule
 
       if (EstimateVariances) then
         ! These prior parameters are modelled as in BGLR
-        R2=0.5d0
+        ! R2=0.5d0 with error and markers
+        TmpR = 1.0d0
+        if (nRandom.gt.0) then
+          TmpR = TmpR + 1.0d0
+        end if
+        if (nMar.gt.0) then
+          TmpR = TmpR + 1.0d0
+        end if
+        R2 = 1/TmpR
 
         TmpR=1 ! =Var(Err) ! should be 1 when Phen is standardized
-        VarErrSamp=TmpR*(1.0d0-R2)
+
         ErrDF0=5.0d0
         ErrDF=nRecTrR+ErrDF0
+        VarErrSamp=TmpR*R2
         ErrS0=VarErrSamp*(ErrDF0+2.0d0)
+
+        if (nRandom.gt.0) then
+          RandomDF0=5.0d0
+          RandomDF=nRecTrR+ErrDF0
+          VarRandomSamp=TmpR*R2
+          RandomS0=VarRandomSamp*(RandomDF0+2.0d0)
+        end if
 
         if (nMar.gt.0) then
           MarDF0=5.0d0
@@ -1130,6 +1294,9 @@ module AlphaBayesModule
           MarS0=VarMarSamp*(MarDF0+2.0d0)
         end if
       else
+        if (nRandom.gt.0) then
+          VarRandomSamp=VarRandom/PhenVar
+        end if
         if (nMar.gt.0) then
           VarMarSamp=(VarBv/nMarR)/PhenVar
         end if
@@ -1140,6 +1307,9 @@ module AlphaBayesModule
       GaussDevMu=SampleIntelGaussD(n=nIter)
       if (EstimateVariances) then
         GammaDevErr=SampleIntelGammaD(n=nIter,shape=ErrDF/2.0d0,scale=2.0d0)
+        if (nRandom.gt.0) then
+          GammaDevRandom=SampleIntelGammaD(n=nIter,shape=RandomDF/2.0d0,scale=2.0d0)
+        end if
         if (nMar.gt.0) then
           GammaDevMar=SampleIntelGammaD(n=nIter,shape=MarDF/2.0d0,scale=2.0d0)
         end if
@@ -1153,11 +1323,17 @@ module AlphaBayesModule
       if (nFixed.gt.0) then
         open(newunit=FixedUnit,file=FIXEDEFFECTSAMPLESFILE,status="unknown")
       end if
+      if (nRandom.gt.0) then
+        open(newunit=RandomUnit,file=RANDOMEFFECTSAMPLESFILE,status="unknown")
+      end if
       if (nMar.gt.0) then
         open(newunit=MarUnit,file=MARKERSAMPLESFILE,status="unknown")
       end if
       if (EstimateVariances) then
         open(newunit=VarErrUnit,file=RESIDUALVARIANCESAMPLESFILE,status="unknown")
+        if (nRandom.gt.0) then
+          open(newunit=VarRandomUnit,file=RANDOMEFFECTVARIANCESAMPLESFILE,status="unknown")
+        end if
         if (nMar.gt.0) then
           open(newunit=VarMarUnit,file=MARKERVARIANCESAMPLESFILE,status="unknown")
         end if
@@ -1222,6 +1398,33 @@ module AlphaBayesModule
           end if
         end if
 
+        ! Random effects
+        if (nRandom.gt.0) then
+          RandomOrdering(1:nRandom)=RandomOrder(nRandom)
+          GaussDevRandom=SampleIntelGaussD(n=nRandom)
+          do j=1,nRandom
+            k=RandomOrdering(j)
+            Lhs=XpXRandom(k)/VarErrSamp + 1.0d0/VarRandomSamp
+            Rhs=dot(x=RandomTr(:,k),y=Err)/VarErrSamp + XpXRandom(k)*RandomSamp(k)/VarErrSamp
+            Sol=Rhs/Lhs + GaussDevRandom(j)/sqrt(Lhs)
+            Diff=Sol-RandomSamp(k)
+            Err=Err-RandomTr(:,k)*Diff
+            RandomSamp(k)=Sol
+          end do
+          if (Iter.gt.nBurn) then
+            write(RandomUnit,RandomSampFmt) RandomSamp*PhenSd
+            RandomEst=RandomEst+RandomSamp/nSampR
+          end if
+          ! Random effect variance
+          if (EstimateVariances) then
+            VarRandomSamp=(dot(x=RandomSamp,y=RandomSamp)+RandomS0)/GammaDevRandom(Iter)
+            if (Iter.gt.nBurn) then
+              write(VarRandomUnit,*) VarRandomSamp*PhenVar
+              VarRandomEst=VarRandomEst+VarRandomSamp/nSampR
+            end if
+          end if
+        end if
+
         ! Markers
         if (nMar.gt.0) then
           RandomOrdering(1:nMar)=RandomOrder(nMar)
@@ -1254,7 +1457,6 @@ module AlphaBayesModule
               write(GenoPartUnit(i),BvSampFmt) BvSamp
             end if
           end if
-
           ! Marker variance
           if (EstimateVariances) then
             VarMarSamp=(dot(x=MarSamp,y=MarSamp)+MarS0)/GammaDevMar(Iter)
@@ -1274,6 +1476,10 @@ module AlphaBayesModule
           end if
           if (nFixed.gt.0) then
             call gemv(A=FixedTr,x=FixedSamp,y=BvSamp)
+            Err=Err-BvSamp
+          end if
+          if (nRandom.gt.0) then
+            call gemv(A=RandomTr,x=RandomSamp,y=BvSamp)
             Err=Err-BvSamp
           end if
           if (nMar.gt.0) then
@@ -1301,11 +1507,19 @@ module AlphaBayesModule
         flush(FixedUnit)
         close(FixedUnit)
       end if
+      if (nRandom.gt.0) then
+        flush(RandomUnit)
+        close(RandomUnit)
+      end if
       if (nMar.gt.0) then
         flush(MarUnit)
         close(MarUnit)
       end if
       if (EstimateVariances) then
+        if (nRandom.gt.0) then
+          flush(VarRandomUnit)
+          close(VarRandomUnit)
+        end if
         if (nMar.gt.0) then
           flush(VarMarUnit)
           close(VarMarUnit)
@@ -1344,6 +1558,15 @@ module AlphaBayesModule
         close(Unit)
       end if
 
+      if (nRandom.gt.0) then
+        open(newunit=Unit,file=RANDOMEFFECTESTIMATEFILE,status="unknown")
+        do i=1,nRandom
+          write(Unit,*) RandomEst(i)*PhenSd
+        end do
+        flush(Unit)
+        close(Unit)
+      end if
+
       if (nMar.gt.0) then
         open(newunit=Unit,file=MARKERESTIMATEFILE,status="unknown")
         do i=1,nMar
@@ -1358,6 +1581,13 @@ module AlphaBayesModule
         write(Unit,*) VarErrEst*PhenVar
         flush(Unit)
         close(Unit)
+
+        if (nRandom.gt.0) then
+          open(newunit=Unit,file=RANDOMEFFECTVARIANCEESTIMATEFILE,status="unknown")
+          write(Unit,*) VarRandomEst*PhenVar
+          flush(Unit)
+          close(Unit)
+        end if
 
         if (nMar.gt.0) then
           open(newunit=Unit,file=MARKERVARIANCEESTIMATEFILE,status="unknown")
@@ -1403,6 +1633,10 @@ module AlphaBayesModule
         deallocate(FixedSamp)
         deallocate(GaussDevFixed)
       end if
+      if (nRandom.gt.0) then
+        deallocate(RandomSamp)
+        deallocate(GaussDevRandom)
+      end if
       if (nMar.gt.0) then
         deallocate(MarSamp)
         deallocate(GaussDevMar)
@@ -1411,6 +1645,9 @@ module AlphaBayesModule
         deallocate(SX2)
         deallocate(MX2)
         deallocate(GammaDevErr)
+        if (nRandom.gt.0) then
+          deallocate(GammaDevRandom)
+        end if
         if (nMar.gt.0) then
           deallocate(GammaDevMar)
         end if

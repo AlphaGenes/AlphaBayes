@@ -150,8 +150,9 @@ FixedEffectTrainFile specifies a file that contains a file with fixed effect fac
   # Prepare the file
   #   * first column must be individual identifications
   #   * note that intercept is removed from X
-  write.csv(x=cbind(YourDataFrame$Id, X[, -1]), file = "FixedEffects.csv",
-            row.names = FALSE, col.names = FALSE)
+  library(package = "readr")
+  write_csv(x = as.tibble(cbind(YourDataFrame$Id, X[, -1])),
+            path = "RandomEffectsTrain.csv", col_names=FALSE)
 
 ::
 
@@ -169,6 +170,44 @@ NumberOfFixedEffectLevels
   NumberOfFixedEffectLevels , 2
 
 NumberOfFixedEffectLevels specifies the number of fixed effect levels in `FixedEffectTrainFile`_. This specification must be given if `FixedEffectTrainFile`_ is specified! Note that this is the number of estimable levels!!!
+
+RandomEffectTrainFile
+---------------------
+
+::
+
+  RandomEffectTrainFile , [String]
+  RandomEffectTrainFile , RandomEffectsTrain.txt
+
+RandomEffectTrainFile specifies a file that contains a file with random effect factor (just one for now!) used in training. The file should have *1 + nL* columns, where the first column are individual identifications and *nL* is number of levels of the factors, and *nR* rows, where *nR* is number of records. See `NumberOfTrainRecords`_ to specify number of rows. Columns can be separated by space, tab, or comma. Factor levels must be provided as dummy codes and no checking is done about them! An example for four individuals with three levels is shown below. The result is three columns with three estimable levels, because prior information enables estimation of all levels. If you are struggling to understand all this or prepare it yourself, use a tool like "model.matrix" in R. An R code to do all this would be like this:
+
+::
+
+  # Construct model matrix
+  X = model.matrix(~ -1 + Effect1,
+                   data = YourDataFrame)
+  # Prepare the file
+  #   * first column must be individual identifications
+  library(package = "readr")
+  write_csv(x = as.tibble(cbind(x[[1]], X)),
+            path = "RandomEffectsTrain.csv", col_names=FALSE)
+
+::
+
+  id1  1  0  0
+  id2  0  1  0
+  id3  0  0  1
+  id4  1  0  0
+
+NumberOfRandomEffectLevels
+--------------------------
+
+::
+
+  NumberOfRandomEffectLevels , [Value]
+  NumberOfRandomEffectLevels , 3
+
+NumberOfRandomEffectLevels specifies the number of random effect levels in `RandomEffectTrainFile`_. This specification must be given if `RandomEffectTrainFile`_ is specified!
 
 GenotypeTrainFile
 -----------------
@@ -272,6 +311,16 @@ NumberOfBurnInIterations
 
 NumberOfBurnInIterations specifies the number of burn-in iterations used when using MCMC methods. Default is 1,000.
 
+RandomEffectVariance
+--------------------
+
+::
+
+  RandomEffectVariance , [Value]
+  RandomEffectVariance , 0.5
+
+RandomEffectVariance specifies variance for the random effect. This is used as a given/known value in some methods - described elsewhere. Default is 0.5 (when genetic markers are not included in the model) or 0.33 (when genetic markers are included in the model).
+
 GeneticVariance
 ---------------
 
@@ -280,7 +329,7 @@ GeneticVariance
   GeneticVariance , [Value]
   GeneticVariance , 0.5
 
-GeneticVariance specifies genetic variance. This is used as a given/known value in some methods - described elsewhere. Default is 0.5.
+GeneticVariance specifies genetic variance. This is used as a given/known value in some methods - described elsewhere. Default is 0.5 (when random effect is not given) or 0.33 (when random effect is given).
 
 ResidualVariance
 ----------------
@@ -290,7 +339,7 @@ ResidualVariance
   ResidualVariance , [Value]
   ResidualVariance , 0.5
 
-ResidualVariance specifies residual/environmental variance. This is used as a given/known value in some methods - described elsewhere. Default is 0.5.
+ResidualVariance specifies residual/environmental variance. This is used as a given/known value in some methods - described elsewhere. Default is 0.5 (when random effect is not given) or 0.33 (when random effect is given).
 
 NumberOfProcessors
 ------------------
