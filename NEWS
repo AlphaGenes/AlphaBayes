@@ -1,0 +1,7 @@
+
+v0.1.0 2018-04-07
+  * First "public" version of the stripped down AlphaBayes
+  * Simplified handling of spec file with lots of reasonable defaults
+  * Added support for any number of fixed effect (=factor) levels and fixed covariates plus one random effect
+  * Added genome partitions
+  * Added user's manual

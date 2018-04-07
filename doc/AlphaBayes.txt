@@ -12,7 +12,7 @@
 Introduction
 =========================================================================================
 
-|AB| is a simple program for genome-wide marker regression. This is a stripped down no-frills version that only fits a ridge regression model.
+|AB| is a simple program for genome-wide marker regression along with fixed and random effects. This is a stripped down no-frills version of previous AlpahBayes that only fits a ridge regression model for markers.
 
 Please report bugs or suggestions on how the program / user interface / manual could be improved or made more user friendly to Gregor Gorjanc (`Gregor.Gorjanc@roslin.ed.ac.uk <Gregor.Gorjanc@roslin.ed.ac.uk>`_) or John Hickey (`John.Hickey@roslin.ed.ac.uk <John.Hickey@roslin.ed.ac.uk>`_).
 
