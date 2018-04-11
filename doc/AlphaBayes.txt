@@ -152,7 +152,9 @@ FixedEffectTrainFile specifies a file that contains a file with fixed effect fac
   #   * note that intercept is removed from X
   library(package = "readr")
   write_csv(x = as.tibble(cbind(YourDataFrame$Id, X[, -1])),
-            path = "RandomEffectsTrain.csv", col_names=FALSE)
+            path = "FixedEffectsTrain.csv", col_names=FALSE)
+  # Number of levels to provide in the spec file
+  ncol(X[, -1])
 
 ::
 
@@ -191,6 +193,8 @@ RandomEffectTrainFile specifies a file that contains a file with random effect f
   library(package = "readr")
   write_csv(x = as.tibble(cbind(x[[1]], X)),
             path = "RandomEffectsTrain.csv", col_names=FALSE)
+  # Number of levels to provide in the spec file
+  ncol(X)
 
 ::
 
