@@ -449,6 +449,18 @@ module AlphaBayesModule
                 stop 1
               end if
 
+            case ("randomeffectvariance")
+              if (allocated(Second)) then
+                VarRandom = Char2Double(trim(adjustl(Second(1))))
+                if (LogStdoutInternal) then
+                  write(STDOUT, "(a)") " Random effect variance: "//trim(Real2Char(VarRandom))
+                end if
+              else
+                write(STDERR, "(a)") " ERROR: Must specify a value for RandomEffectVariance, i.e., RandomEffectVariance, 0.5"
+                write(STDERR, "(a)") " "
+                stop 1
+              end if
+
             case ("geneticvariance")
               if (allocated(Second)) then
                 VarBv = Char2Double(trim(adjustl(Second(1))))
@@ -1244,42 +1256,42 @@ module AlphaBayesModule
       if (nRandom.gt.0) then
         RandomEst=0.0d0
         RandomSamp=0.0d0
-        VarRandomEst=0.0d0
       end if
       if (nMar.gt.0) then
         MarEst=0.0d0
         MarSamp=0.0d0
-        VarMarEst=0.0d0
       end if
-      VarErrEst=0.0d0
 
       if (EstimateVariances) then
         ! These prior parameters are modelled as in BGLR
         ! R2=0.5d0 with error and markers
-        TmpR = 1.0d0
+        TmpR=1.0d0
         if (nRandom.gt.0) then
-          TmpR = TmpR + 1.0d0
+          TmpR=TmpR+1.0d0
         end if
         if (nMar.gt.0) then
-          TmpR = TmpR + 1.0d0
+          TmpR=TmpR+1.0d0
         end if
-        R2 = 1/TmpR
+        R2=1.0d0/TmpR
 
-        TmpR=1 ! =Var(Err) ! should be 1 when Phen is standardized
+        TmpR=1.0d0 ! =Var(Err) ! should be 1 when Phen is standardized
 
+        VarErrEst=0.0d0
+        VarErrSamp=TmpR*R2
         ErrDF0=5.0d0
         ErrDF=nRecTrR+ErrDF0
-        VarErrSamp=TmpR*R2
         ErrS0=VarErrSamp*(ErrDF0+2.0d0)
 
         if (nRandom.gt.0) then
-          RandomDF0=5.0d0
-          RandomDF=nRecTrR+ErrDF0
+          VarRandomEst=0.0d0
           VarRandomSamp=TmpR*R2
+          RandomDF0=5.0d0
+          RandomDF=nRandom+RandomDF0
           RandomS0=VarRandomSamp*(RandomDF0+2.0d0)
         end if
 
         if (nMar.gt.0) then
+          VarMarEst=0.0d0
           MarDF0=5.0d0
           MarDF=nMarR+MarDF0
           SX2=0.0d0
