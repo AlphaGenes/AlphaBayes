@@ -426,7 +426,7 @@ GenomePartitionFile
   GenomePartitionFile , [String]
   GenomePartitionFile , GenomePartition.txt
 
-GenomePartitionFile specifies a file that contains markers used for genome partitions. The file should simply contain a list of marker numbers with one marker number per line. The marker number refers to a column in genotype files, i.e., `GenotypeTrainFile`_. For example, marker number 2 refers to the scond marker genotype, which is the third column in a genotype file. In case there are several genome partitions use several GenomePartitionFile specifications, e.g., for two genome partitions use specification shown below. Note that markers should not be repeated in different partitions - |AB| does not check for this!
+GenomePartitionFile specifies a file that contains markers used for genome partitions. The file should simply contain a list of marker numbers with one marker number per line. The marker number refers to a column in genotype files, i.e., `GenotypeTrainFile`_. For example, marker number 2 refers to the second marker genotype, which is the third column in a genotype file. In case there are several genome partitions use several GenomePartitionFile specifications, e.g., for two genome partitions use specification shown below. Note that markers should not be repeated in different partitions - |AB| does not check for this!
 
 ::
 
@@ -469,6 +469,8 @@ GenomePartitionN.txt
 --------------------
 
 Holds estimates/predictions or samples for genome partition "N". The "Remainder" partition covers all markers that have not been allocated to any other partition.
+
+Use the utility script `util/GenomePartitions.R` to summarize variance components for genome partitions.
 
 Examples
 =========================================================================================
