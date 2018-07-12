@@ -1802,24 +1802,39 @@ end module
 program AlphaBayes
 
   use ISO_Fortran_Env, STDIN=>input_unit,STDOUT=>output_unit,STDERR=>error_unit
-  use AlphaHouseMod, only : PrintElapsedTime
+  use AlphaHouseMod, only : PrintCpuTime, PrintElapsedTime, PrintDateTime
   use AlphaBayesModule
   use IntelRNGMod
   implicit none
 
-  real(real32) :: StartTime, EndTime
+  integer(int32) :: ClockRate, ClockMax, ClockStartCount, ClockEndCount
+  real(real32) :: CpuStartTime, CpuEndTime
 
-  call cpu_time(StartTime)
+  write(STDOUT, "(a)") ""
   call AlphaBayesTitle
+  write(STDOUT, "(a)") ""
+  call PrintDateTime
+  call cpu_time(CpuStartTime)
+  call system_clock(count_rate=ClockRate, count_max=ClockMax)
+  call system_clock(count=ClockStartCount)
+
   call IntitialiseIntelRNG
   call ReadParam
   call ReadData
   call Analysis
   call Prediction
   call UnintitialiseIntelRNG
-  call cpu_time(EndTime)
-  !call AlphaBayesTitle
-  call PrintElapsedTime(StartTime, EndTime)
+
+  write(STDOUT, "(a)") ""
+  call PrintDateTime
+  write(STDOUT, "(a)") ""
+  call cpu_time(CpuEndTime)
+  call PrintCpuTime(CpuStartTime, CpuEndTime)
+  call system_clock(count=ClockEndCount)
+  call PrintElapsedTime(Start=ClockStartCount, End=ClockEndCount, Rate=ClockRate, Max=ClockMax)
+  write(STDOUT, "(a)") ""
+  call AlphaBayesTitle
+  write(STDOUT, "(a)") ""
 
 end program
 
