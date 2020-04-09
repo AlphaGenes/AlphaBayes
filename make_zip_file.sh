@@ -7,7 +7,7 @@ mkdir AlphaBayes
 #cmake . ; make
 
 # to build the manual using Sphinx:
-#( cd doc ; make latexpdf )
+( cd doc ; make latexpdf )
 
 cp -r example AlphaBayes
 

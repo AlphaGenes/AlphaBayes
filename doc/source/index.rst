@@ -461,7 +461,7 @@ Holds predictions for individuals in the set "X".
 PredictionsSummary.txt
 ----------------------
 
-Holds descriptive staistics about predictions - correlation between true and predicted values as well as regression of one on another.
+Holds descriptive statistics about predictions - correlation between true and predicted values as well as regression of one on another.
 
 GenomePartitionN.txt
 --------------------
