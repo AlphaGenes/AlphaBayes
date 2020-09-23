@@ -22,7 +22,7 @@ Material available comprises the compiled programs for 64 bit Windows, Linux, an
 Conditions of use
 -----------------
 
-|AB| is part of a suite of software that our group has developed. It is fully and freely available for academic use, provided that users cite it in publications. However, due to our contractual obligations with some of the funders of the research program that has developed this suite of software, all interested commercial organisations are requested to contact John Hickey (`John.Hickey@roslin.ed.ac.uk <John.Hickey@roslin.ed.ac.uk>`_) to discuss the terms of use.
+|AB| is part of a suite of software that our group has developed. It is fully and freely available for all use under the MIT License.
 
 Disclaimer
 ----------

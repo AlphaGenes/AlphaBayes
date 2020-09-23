@@ -31,4 +31,6 @@ commit=`git rev-parse --short HEAD`
 echo Version: $version > AlphaBayes/version.txt
 echo Commit: $commit >> AlphaBayes/version.txt
 
+cp MIT_License.txt AlphaBayes
+
 zip -r AlphaBayes.zip AlphaBayes
