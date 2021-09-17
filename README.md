@@ -6,7 +6,7 @@ AlphaBayes is a simple program for genome-wide marker regression along with fixe
 Availability
 ============
 
-The AlphaImpute.zip file contains executibles for Windows, Linux, and Mac, a manual, and an example dataset.
+The AlphaBayes.zip file contains executibles for Windows, Linux, and Mac, a manual, and an example dataset.
 
 Conditions of use
 =================
